@@ -6,16 +6,16 @@ SuRE is an interactive user interface for visual exploration of surrogate rules 
 
 ## Content
 
-`prepare` folder:
+`prepare/` folder:
 
 - The notebook [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) illustrates how to generate the necessary output files for the visual analytics system in `webapp`.
 
-`webapp` folder:
+`webapp/` folder:
 
-- this folder contains all the components of the visual analytics system iSuRE.
-- `data` contains the explanation information we want to explore in the web application.
-- `server` contains the back-end code.
-- `static` contains the front-end code. 
+- this folder contains all the components of the visual analytics system SuRE.
+- `data/` contains the data you want to explore in the web application.
+- `server/` contains the back-end code.
+- `static/` contains the front-end code. 
 
 ## Web application
 
@@ -29,7 +29,7 @@ Please watch this [video](https://www.youtube.com/watch?v=kskukXg1X3s&feature=yo
 
 #### 2.1 Generate necessary data for running the web application
 
-- Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/tree/masterprepare/input)
+- Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/tree/master/prepare/input)
 - Then make some changes to read your own data in the notebok [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) 
 - You will get a folder named `user_defined` in [prepare/output](https://github.com/nyuvis/SuRE/tree/master/prepare/output)
 - Move the `user_defined` folder to `webapp/data/`
