@@ -25,7 +25,7 @@ SuRE is an interactive user interface for visual exploration of surrogate rules 
 
 You can visit [here](http://nyuvis-web.poly.edu/projects/isure/index.html) to play with the live demo.
 
-Please watch this [video](https://www.youtube.com/watch?v=kskukXg1X3s&feature=youtu.be) for an introduction and demo.
+Please watch this [video](https://www.youtube.com/watch?v=-Q_aBRnloaQ&feature=youtu.be) for an introduction and demo.
 
 ### 2. How to run the app locally with your own data
 
