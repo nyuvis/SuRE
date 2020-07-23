@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+
+    <title>Surrogate Rule Explorer</title>
+    <base href="../" target="_blank">
+    <link rel="stylesheet" href="static/styles.css">
+  </head>
+
+  <body>
+    <div id="myModel" class="model">
+      <!-- Model content -->
+      <div class="model-content">
+        <div>
+          <p>
+            In this system, we are going to generate rules that describe the behaviors of a black box model. Please specify support*, the max number of features, the number of feature bins* you want to reach for each rule.
+          </p>  
+          <div style="font-size: 12px">
+            <p>
+              *support: the number of instances that match a rule.<br>
+              *number of feature bins: the number of different value ranges/bins for each feature.
+            </p>
+          </div>
+        </div>
+        
+        <div class="flex-col" style="display:flex; justify-content: center">
+          <div>
+            <span title="lower bound of support">Min Support: </span>
+            <input id="support_val" value=20>
+          </div>
+          <div>
+            <span title="lower bound of support">Min Fidelity: </span>
+            <input id="fidelity_val" value=0.85>
+          </div>          
+          <div>
+            <!-- <p id="feat-text" style="margin-bottom: 1px">Max Number of Features:</p>
+            <div id="slider-feat"></div> -->
+            <span>Max Number of Features: </span>
+            <input id="feature_val" value=2>
+          </div>
+          <div>
+            <span>Number of Feature Bins: </span>
+            <input id="feature_bin" value=4>
+          </div>
+          <!-- <div>
+            <span>Data to include for tree generation:</span>
+            <div class="flex-row">
+              <input type="checkbox" id="conf_tp" name="conf_tp" value="tp">
+                <label for="conf_tp"> True Positive</label><br>
+              <input type="checkbox" id="conf_fp" name="conf_fp" value="fp">
+                  <label for="conf_fp"> False Positive</label><br>
+              <input type="checkbox" id="conf_tn" name="conf_tn" value="tn">
+                  <label for="conf_tn"> True Negative</label><br>
+              <input type="checkbox" id="conf_fn" name="conf_fn" value="fn">
+                  <label for="conf_fn"> False Negative</label><br>
+            </div>
+          </div> -->
+          <div>
+            <button id="update_cancel" onclick="click_cancel()">Cancel</button>
+            <button id="generate_rule">Generate Rules</button>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+    <div id="progress" class="model">
+      <div style="margin: auto; text-align: center;">
+        <img style="border-bottom: none; width: 50px; margin-left: 10px"src="static/icon/progress.gif" alt="progressing">
+      </div>
+    </div>
+
+    <svg width="0" height="0">
+      <pattern id="fn_pattern" patternUnits="userSpaceOnUse" width="4" height="4">
+        <rect width="4" height="4" fill="#6babc1"></rect>
+        <path d="M-1,1 l2,-2
+                 M0,4 l4,-4
+                 M3,5 l2,-2" 
+              style="stroke:black; stroke-width:.5" />
+      </pattern>
+      <pattern id="fp_pattern" patternUnits="userSpaceOnUse" width="4" height="4">
+        <rect width="4" height="4" fill="#e68882"></rect>
+        <path d="M-1,1 l2,-2
+                 M0,4 l4,-4
+                 M3,5 l2,-2" 
+              style="stroke:black; stroke-width:.5" />
+      </pattern>
+      <pattern id="fn_pattern_white" patternUnits="userSpaceOnUse" width="4" height="4">
+        <rect width="4" height="4" fill="#6babc1"></rect>
+        <path d="M-1,1 l2,-2
+                 M0,4 l4,-4
+                 M3,5 l2,-2" 
+              style="stroke:white; stroke-width:.5" />
+      </pattern>
+      <pattern id="fp_pattern_white" patternUnits="userSpaceOnUse" width="4" height="4">
+        <rect width="4" height="4" fill="#e68882"></rect>
+        <path d="M-1,1 l2,-2
+                 M0,4 l4,-4
+                 M3,5 l2,-2" 
+              style="stroke:white; stroke-width:.5" />
+      </pattern>
+    </svg>
+    <div class="flex-col">
+      <!-- Statics -->
+      <div class="flex-col" style="margin-left: 5px">
+        <div class='flex-row'>
+          <!-- Rule/Node Generation Setting -->
+          <div class="flex-row" id="data-setting" style="display: flex">
+            <!-- choose dataset -->
+            <div class="title flex-row" style="margin-right: 20px">
+              <span>Dataset: </span>
+              <select id="dataset">
+                <option value='user_defined'>User Defined</option>
+                <option value='loan'>Loan</option>
+                <option value='chemistry'>Chemistry</option>
+                <option value='diabetes'>Diabetes</option>
+                <option value='synthetic'>Synthetic</option>
+              </select>
+            </div>
+            <div class="title flex-row" style="margin-right: 20px">
+              <span>Rule Encoding: </span>
+              <select id="rule_encoding">
+                <option value='bar'>bar</option>
+                <option value='mosaic'>mosaic</option>
+              </select>
+            </div>
+
+            <!-- Pruning -->
+            <div class="title flex-row" style="margin-right: 20px">
+              <span>Number of Rules: </span>
+              <span id="rule-num" style="font-weight: normal;"></span>
+              <div>
+                <input style="border-bottom: none; width: 15px; margin-left: 10px"  type="image" src="static/icon/gear.png" 
+                onclick="click_setting()">                      
+              </div>
+            </div>
+
+            <div class='flex-row' id="x-setting" style="display: none">
+              <div class="title"><span>x-axis</span></div>
+              <select id="x_position">
+                <option value="fidelity">Fidelity</option>
+                <option value="accuracy">Accuracy</option>
+              </select>
+            </div>
+            <!-- legend -->
+            <div class="flex-col" style="height: 20px; border-left: 1px solid darkgrey">
+              <svg id="legend1"></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main view of the rules -->
+      <div class="flex-col" style="border: 1px solid lightgrey; 
+        margin-left: 5px;
+        width: 1250px;
+        height: 670px;">
+
+        <!-- Rules -->
+        <div id="rule-detail" style="max-width: 1250px;">
+          <!-- Tab links -->
+          <div class="tab">
+            <button class="tablinks active" onclick="showRule(event, 'overview')">
+              Min Rule Set
+            </button>
+            <button class="tablinks" id="tab_multiple" onclick="showRule(event, 'multiple')">
+              Similar Subgroups
+            </button>
+            <button class="tablinks" onclick="showRule(event, 'data_tab')">
+              Data
+            </button>
+          </div>
+
+          <!-- Overview -->
+          <div class="tabcontent" id="overview" style="display: flex">
+            <div class="flex-row">
+              <div class="flex-col">
+                <div class="flex-row" id="header1" style="max-width: 1050px;">
+                  <div>
+                    <svg id="stat_legend"></svg>
+                  </div>
+                  <div id="column_div" style="max-width: 750px; overflow-x: scroll;">
+                    <div>
+                      <svg id="column_svg" style="margin-left: 0px"></svg>            
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex-row" style="max-height: 660px; max-width: 1050px; overflow: scroll;">           
+                  <div id="stat_div" class='stat' style="max-height: 360px; overflow: scroll;">
+                    <div class="flex-row">
+                      <!-- <svg id="compare"></svg> -->
+                      <svg id="stat"></svg>              
+                    </div>
+                  </div>
+                  <div id="rule_div" style="max-height: 360px; max-width: 750px; overflow: scroll;">
+                    <div>
+                      <svg id="rule_svg"></svg>            
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="max-height: 300px; margin-top: 50px">
+                <svg id="graph"></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selected multiple nodes -->
+          <div class="flex-col tabcontent" id="multiple">
+             <div class='flex-row' id="header4">
+              <div>
+                <svg id='stat_legend4'></svg>
+              </div>
+              <div id="column_div4" style="max-width: 1250px; overflow-x: scroll;">
+                <div>
+                  <svg id="column_svg4" style="margin-left: 10px"></svg>            
+                </div>
+              </div>
+            </div>
+
+            <div class="flex-row">
+              <div id="stat_div4" class='stat flex-row' style="max-height: 360px; overflow: scroll;">
+                <div>
+                  <svg id="compare4"></svg>
+                  <svg id="stat4"></svg>              
+                </div>
+              </div>
+              <div id="rule_div4" style="max-height: 360px; max-width: 1250px; overflow: scroll;">
+                <div>
+                  <svg id="rule_svg4"></svg>            
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class='flex-col tabcontent' id='data_tab'>
+            <div id="header5">
+              <div id="column_div5" style="max-width: 1250px; margin-left: 20px overflow-x: scroll;">
+                <div>
+                  <svg id="column_svg5" style="margin-left: 30px"></svg>            
+                </div>
+              </div>
+            </div>
+            <div class='flex-row' >
+              <div id="data-pred" style="max-height: 660px; max-width: 200px; overflow-y: scroll;">
+                <svg></svg>
+              </div>
+              <div id="data-table" style="max-height: 660px; max-width: 1050px; overflow: scroll;">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div id="rule_description" class="flex-col">          
+        </div>
+
+    </div>
+    
+    <canvas id="myCanvas" width="0" height="0"></canvas>
+  	
+	<!-- load the d3.js library -->	
+	<script src="static/lib/d3.v4.min.js"></script>
+	<script src="static/lib/d3-queue.v3.min.js"></script>
+
+  <script src="static/const.js"></script>
+  <script src="static/util.js"></script>
+  <script src="static/tree_summary.js"></script>
+  <script src="static/summary_view.js"></script>
+  <script src="static/stat_summary_view.js"></script>
+  <script src="static/legend.js"></script>
+  <script src="static/controller.js"></script>
+  <script src="static/linked_rule_view.js"></script>
+  <script src="static/graph.js"></script>
+  <script src="static/interactive_table.js"></script>
+  </body>
+</html>

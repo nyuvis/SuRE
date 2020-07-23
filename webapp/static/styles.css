@@ -1,0 +1,354 @@
+.rule-view div {
+  display: flex; 
+}
+
+body{
+  font-family: sans-serif;
+  font-size: 12px;  
+  margin-top: 0;
+}
+
+input {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  border-bottom: 1px solid grey;
+  width: 25px;
+}
+
+#controlview {
+  font-size: 12px;
+}
+
+.compare-fill {
+  stroke: black;
+}
+
+.pos {
+  fill: grey;
+  fill-opacity: .5;
+}
+
+.summary_hist {
+  margin: 5px;
+}
+
+.selection {
+  border: 1px solid lightgrey;
+}
+
+.column {
+  font-size: 12px;
+}
+
+.grid-row line {
+  stroke-width: .5;
+}
+
+.grid-col line {
+  stroke-width: .5;
+}
+
+rect {
+  stroke-width: .5;
+}
+
+.slider-div p {
+  margin-top: 2px;
+  margin-left: 5px;
+}
+
+.slider-div {
+  margin: 10px 5px 10px 5px;
+}
+
+.flex-col {
+  display: flex;
+  flex-direction: column; 
+}
+
+.flex-row {
+  display: flex;
+  flex-direction: row; 
+}
+
+.stat {
+  max-height: 280px; max-width: 300px; overflow-y: scroll;
+  direction: rtl;
+}
+
+.stat div {
+  direction: ltr;
+}
+
+.title {
+  margin-top: 5px;
+  margin-bottom: 10px;
+  margin-left: 5px;
+  font-weight: bold;
+  font-size: 12px;
+  /*border-left: 1px solid grey;*/
+}
+
+.title span{
+  margin-left: 5px;
+}
+
+/* The Model (background) */
+.model {
+  display: none; /* Hidden by default */
+  position: fixed; /* Stay in place */
+  z-index: 1; /* Sit on top */
+  padding-top: 100px; /* Location of the box */
+  left: 0;
+  top: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  overflow: auto; /* Enable scroll if needed */
+  background-color: rgb(0,0,0); /* Fallback color */
+  background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+}
+
+/* Model Content */
+.model-content {
+  background-color: #fefefe;
+  margin: auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 50%;
+  font-size: 16px;
+}
+
+/* The Close Button */
+.close {
+  color: #aaaaaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+  color: #000;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+#node_description p {
+  margin: 0px;
+}
+.rule_highlight {
+  fill: #fdcdac;
+  fill-opacity: .5;
+}
+
+.rule_hover {
+  fill: black;
+  fill-opacity: .1;
+}
+
+.highlight-circle {
+  stroke: black;
+  stroke-width: 1px;
+  fill: none;
+  font-weight: 500;
+}
+
+.highlight-stat {
+  stroke: black;
+  stroke-width: 1.5px;
+  fill: none;
+  font-weight: 500;
+}
+
+
+.unselected-stat {
+  stroke: none;
+  fill: none;
+}
+
+.rule_clicked_node {
+  stroke: black;
+  stroke-width: 2px;
+  fill: none;
+}
+
+.hovered_node {
+  stroke: black;
+  stroke-width: 1.5px;
+  fill: none;
+}
+
+.link_text_back{
+  x: -10;
+  y: -5;
+  width: 20px;
+  height: 10px;
+  stroke: none;
+  fill: white;
+  fill-opacity: .5;
+}
+
+/* Style the tab */
+.tab {
+  border: 1px solid #ccc;
+  background-color: #f1f1f1;
+  justify-content: flex-start;
+}
+
+/* Style the buttons that are used to open the tab content */
+.tab button {
+  background-color: inherit;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  transition: 0.3s;
+}
+
+/* Change background color of buttons on hover */
+.tab button:hover {
+  background-color: #ddd;
+}
+
+.tab button.active {
+  background-color: #ccc;
+}
+
+/* Create an active/current tablink class */
+.tab input.active {
+  background-color: #ccc;
+}
+
+/* Style the buttons that are used to open the tab content */
+.tab input {
+  background-color: inherit;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 5px;
+  transition: 0.3s;
+}
+
+/* Change background color of buttons on hover */
+.tab input:hover {
+  background-color: #ddd;
+}
+
+/* Create an active/current tablink class */
+.tab input.active {
+  background-color: #ccc;
+}
+
+#setting-tabs {
+  height: 29px;
+  border: none;
+}
+
+/* Style the tab content */
+.tabcontent {
+  display: none;
+  border-top: none;
+}
+
+#setting-block {
+  border: 1px solid #ccc;
+}
+
+.support {
+  font-size: 8px;
+}
+
+.legend {
+  font-size: 10px;
+}
+
+.node_feature_name {
+  text-anchor: middle;
+}
+
+.node_mask {
+  fill: 'white';
+  stroke: 'white';
+  fill-opacity: 0;
+  stroke-opacity: 0;
+}
+
+.sign_threshold {
+  text-anchor: middle;
+}
+
+.link_mask {
+  fill: 'white';
+  stroke: 'white';
+  fill-opacity: 0;
+  stroke-opacity: 0;
+}
+
+#radio_group {
+  width: 15px;
+  margin-top: 18px
+}
+
+#radio_group input {
+  width: 10px;
+  height: 12px;
+  margin: 4px;
+}
+
+#data-table {
+  max-height: 280px; 
+  max-width: 900px; 
+  overflow: scroll;
+}
+
+#data-table table {
+  border: 1px solid lightgrey;
+  margin-left: 10px; 
+  border-collapse: collapse;
+}
+
+#data-pred {
+  max-height: 120px; 
+  max-width: 100px;
+  overflow: scroll;
+}
+
+table td {
+  border: 1px solid lightgrey;
+  height: 15px;
+  width: 45px;
+}
+
+#rule_description {
+  margin: 2px 15px 5px 215px;
+  width: 950px;
+  font-size: 15px
+}
+
+.des_text {
+  font-size: 10px;
+}
+
+.summary_back_bar {
+  fill: white;
+  stroke: black;
+  stroke-width: 1px;
+  height: 10px;
+  width: 80px;
+}
+
+.summary_front_bar {
+  stroke: none;
+  height: 10px;
+}
+
+.links line {
+  stroke: #999;
+  stroke-opacity: 0.1;
+}
+
+.nodes circle {
+  stroke: #fff;
+  stroke-width: .5px;
+}
