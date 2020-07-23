@@ -8,13 +8,15 @@ SuRE is an interactive user interface for visual exploration of surrogate rules 
 
 `prepare/` folder:
 
-- The notebook [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) illustrates how to generate the necessary output files for the visual analytics system in `webapp`.
+- The notebook [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) illustrates how to generate the necessary output files for the visual analytics system in `webapp`. After running the code in the notebook, you will get two files:
+  - `test.json` which contains the original input, target values (ground truth), and model prediction.
+  - `histogram.json` which contains the histogram values for each column of the training data.
 
 `webapp/` folder:
 
 - this folder contains all the components of the visual analytics system SuRE.
-- `data/` contains the data you want to explore in the web application.
-- `server/` contains the back-end code.
+- `data/` contains the data you want to explore in the web application. You can generate necessary data in a format the web application can recognize by running the code in the `prepare/` folder. 
+- `server/` contains the back-end code for generating explanations.
 - `static/` contains the front-end code. 
 
 ## Web application
