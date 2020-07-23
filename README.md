@@ -2,11 +2,13 @@
 
 SuRE is an interactive user interface for visual exploration of surrogate rules that describe a black-box model’s behaviors on different groups of instances.
 
+![image](https://user-images.githubusercontent.com/9759891/88327894-9a89d700-ccf5-11ea-929f-812673fc257f.png)
+
 ## Content
 
 `prepare` folder:
 
-- The notebook [generate_output.ipynb](https://github.com/nyuvis/SuRE/prepare/generate_output.ipynb) illustrates how to use the functions in [tree_node_info.py](), as well as how to generate the necessary output files for the visual analytics system in `webapp`.
+- The notebook [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) illustrates how to generate the necessary output files for the visual analytics system in `webapp`.
 
 `webapp` folder:
 
@@ -27,9 +29,9 @@ Please watch this [video](https://www.youtube.com/watch?v=kskukXg1X3s&feature=yo
 
 #### 2.1 Generate necessary data for running the web application
 
-- Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/prepare/input)
-- Then make some changes to read your own data in the notebok [generate_output.ipynb](https://github.com/nyuvis/SuRE/prepare/generate_output.ipynb) 
-- You will get a folder named `user_defined` in [prepare/output](https://github.com/nyuvis/SuRE/prepare/output)
+- Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/tree/masterprepare/input)
+- Then make some changes to read your own data in the notebok [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) 
+- You will get a folder named `user_defined` in [prepare/output](https://github.com/nyuvis/SuRE/tree/master/prepare/output)
 - Move the `user_defined` folder to `webapp/data/`
 
 #### 2.2 Run the server
