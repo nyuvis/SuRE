@@ -14,7 +14,7 @@ You can also play with the [demo](http://nyuvis-web.poly.edu/projects/isure/inde
 
 `prepare/` folder:
 
-- The notebook [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output_without_training.ipynb) and [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output+training.ipynb) illustrate how to generate the necessary output files for the visual analytics system in `webapp`. After running the code in the notebook, you will get two files:
+- The notebook [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data_without_training.ipynb) and [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data%2Btraining.ipynb) illustrate how to generate the necessary output files for the visual analytics system in `webapp`. After running the code in the notebook, you will get two files:
   - `test.json` which contains the original input, target values (ground truth), and model prediction.
 
 `webapp/` folder:
@@ -31,8 +31,8 @@ You can upload your own data to our live demo that is running on our server. And
 Because the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) needs to read the data in a specific format. You can run the code in the `prepare` folder to generate a formatted data. Once you get the data, you can go to our live demo, uploade your own data, and check the rules.
 
 - Step 1: Put your own data in the [prepare/input](https://github.com/nyuvis/SuRE/tree/master/prepare/input) folder. If you have trained a model, you can put the model prediction in the same folder.
-- Step 2: You can run the code in [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output+training.ipynb) to read your own data, train a SVM model on the fly, and then generate the formatted data with both your data and the SVM model predictions on your data. 
-  - If you want to use the model prediction of your own model, you can run the code in [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output_without_training.ipynb). 
+- Step 2: You can run the code in [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data%2Btraining.ipynb) to read your own data, train a SVM model on the fly, and then generate the formatted data with both your data and the SVM model predictions on your data. 
+  - If you want to use the model prediction of your own model, you can run the code in [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data_without_training.ipynb). 
   - You may want to change some columns or variables according to your own needs
 - Step 3: Open the [live demo](http://nyuvis-web.poly.edu/projects/isure/index.html) and choose the dataset of `User Defined`. And you will be asked to set the explanation parameters and upload your own data as shown below.![image-20200820133633157](/Users/junyuan/Library/Application Support/typora-user-images/image-20200820133633157.png) 
 - Step 4: Upload your model by clicking the button of `Choose File`. 
@@ -45,7 +45,7 @@ Because the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) needs t
 #### 1. Generate necessary data for running the web application
 
 - Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/tree/master/prepare/input)
-- Then make some changes to read your own data in the notebok [generate_output.ipynb](https://github.com/nyuvis/SuRE/tree/master/prepare/generate_output.ipynb) 
+- Then make some changes in the notebok [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data_without_training.ipynb) or [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data%2Btraining.ipynb) to read your own data.
 - You will get a folder named `user_defined` in [prepare/output](https://github.com/nyuvis/SuRE/tree/master/prepare/output)
 - Move the `user_defined` folder to `webapp/data/`
 
