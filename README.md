@@ -40,7 +40,6 @@ Because the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) needs t
 - Step 6: Explore the rules in the user interface.
 
 ## Web application
-
 ### How to run the app locally with your own data
 
 #### 1. Generate necessary data for running the web application
