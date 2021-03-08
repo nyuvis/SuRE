@@ -16,6 +16,15 @@ input {
   width: 25px;
 }
 
+#upload input{
+  border: none;
+  background: transparent;
+  padding: 16px 32px;
+  text-decoration: none;
+  margin: 4px 2px;
+  cursor: pointer;
+}
+
 #controlview {
   font-size: 12px;
 }
@@ -39,7 +48,14 @@ input {
 
 .column {
   font-size: 12px;
+  font-weight: normal;
 }
+
+.column_highlight {
+  font-size: 12px;
+  font-weight: bold;
+}
+
 
 .grid-row line {
   stroke-width: .5;
@@ -87,12 +103,31 @@ rect {
   margin-left: 5px;
   font-weight: bold;
   font-size: 12px;
+  max-height: 20px;
   /*border-left: 1px solid grey;*/
 }
 
 .title span{
   margin-left: 5px;
+  margin-right: 5px;
+  margin-top: 2px;
 }
+
+.subtitle {
+  margin-top: 5px;
+  margin-bottom: 10px;
+  margin-left: 5px;
+  font-size: 12px;
+  max-height: 20px;
+  /*border-left: 1px solid grey;*/
+}
+
+.subtitle span{
+  margin-left: 5px;
+  margin-right: 5px;
+  margin-top: 2px;
+}
+
 
 /* The Model (background) */
 .model {
@@ -260,22 +295,22 @@ rect {
 }
 
 .legend {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .node_feature_name {
-  text-anchor: middle;
+  text-anchor: end;
 }
 
 .node_mask {
-  fill: 'white';
-  stroke: 'white';
+  fill: white;
+  stroke: none;
   fill-opacity: 0;
-  stroke-opacity: 0;
+  stroke-width: 1px;
 }
 
 .sign_threshold {
-  text-anchor: middle;
+  text-anchor: end;
 }
 
 .link_mask {
@@ -321,8 +356,8 @@ table td {
 }
 
 #rule_description {
-  margin: 2px 15px 5px 215px;
-  width: 950px;
+  /*margin: 2px 15px 5px 215px;*/
+  width: 250px;
   font-size: 15px
 }
 
@@ -351,4 +386,136 @@ table td {
 .nodes circle {
   stroke: #fff;
   stroke-width: .5px;
+}
+
+.lattice_cond {
+  text-anchor: middle;
+}
+
+.lattice_link {
+  stroke-width: 0.8;
+  stroke-opacity: 0.2;
+}
+
+.lattice_selected {
+  stroke-width: 1.5;
+  stroke-opacity: 0.9;
+}
+
+.lattice_highlight {
+  stroke-width: 1.5;
+  stroke-opacity: 0.9;
+}
+
+.lattice_node > text {
+  visibility: hidden;
+}
+
+.lattice_node_hovered > text{
+  visibility: visible;
+}
+
+.lattice_node_hovered > .node_mask{
+  fill: white;
+  stroke: none;
+  fill-opacity: 0;
+}
+
+.lattice_node_greyout > .node_mask{
+  fill: white;
+  stroke: none;
+  fill-opacity: 0.5;
+}
+
+.lattice_node_greyout > text {
+  visibility: hidden;
+}
+
+
+.lattice_node_selected > text {
+  visibility: visible;
+}
+
+.lattice_node_selected > .node_mask{
+  fill: white;
+  stroke: black;
+  fill-opacity: 0;
+  stroke-width: 1px;
+}
+
+.filter-content {
+  margin: 2px;
+}
+
+.filter-summary {
+  background: rgba(192, 192, 192, .5);
+  margin: 2px;
+  justify-content: space-between;
+}
+
+#selected_filter {
+  border: grey 1px solid;
+  margin-left: 10px;
+  margin-top: 5px;
+  min-width: 200px;
+  max-width: 500px;
+  min-height: 20px;
+  align-self: flex-start;
+}
+
+#data_selected_filter {
+  border: grey 1px solid;
+  margin-left: 10px;
+  margin-top: 5px;
+  min-width: 200px;
+  max-width: 500px;
+  min-height: 20px;
+  align-self: flex-start;
+}
+
+.vl {
+  border-left: 1px solid grey;
+  margin: 15px;
+}
+
+.text-hint {
+  margin-top: 60px;
+  margin-left: 20px;
+  border-left: 1px solid lightgrey;
+  padding: 10px;
+  max-height: 350px;
+}
+
+.text-hint p {
+  margin: 0px;
+  font-size: 15px;
+}
+
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 350px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 0;
+  
+  /* Position the tooltip */
+  position: absolute;
+  z-index: 1;
+  top: -100%;
+  left: 105%;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}
+
+.rule_item text{
+  font: 14px sans-serif;
 }

@@ -1,1 +1,6 @@
 prepare/.ipynb_checkpoints/
+webapp/server/surrogate_rule/__pycache__/
+webapp/server/__pycache__/
+*/**/.DS_Store
+.DS_Store
+*/.DS_Store

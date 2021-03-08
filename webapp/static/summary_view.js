@@ -1,10 +1,10 @@
-let depth_height = 18;
+let depth_height = 50;
 let view_width = 980;
 let max_r = 15;
 
 let summary_x,
 	summary_y,
-	tree_height,
+	tree_height = 500,
 	summary_size,
   summary_size_,
   fidelity_color,

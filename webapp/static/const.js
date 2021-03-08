@@ -1,4 +1,5 @@
-const domain = "http://localhost:6060/"
+// const domain = "http://localhost:6060/"
+const domain = "http://nyuvis-web.poly.edu/projects/isure/"
 
 const BAND_RULE_VIS = "band_range";
 const GRADIENT_RULE_VIS = "gradient_range";

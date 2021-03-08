@@ -1,6 +1,6 @@
 
-let graph_width = 280,
-    graph_height = 280,
+let graph_width = 290,
+    graph_height = 290,
     simulation;
 
 d3.select('#graph')

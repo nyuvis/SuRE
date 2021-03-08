@@ -6,7 +6,7 @@ let margin = {top: 0, right: 45, bottom: 5, left: 0},
     height;
 let overviewWidth = 150;
 
-let folder = "user_defined";
+let folder = "diabetes";
 
 height = 650 - margin.top - margin.bottom;
 
@@ -18,7 +18,7 @@ let rectMarginTop = 5, rectMarginBottom = 5,
 let glyphCellWidth = 4, glyphCellHeight = 10;
 let rectHeight, rectWidth;
 let supportRectWidth = 65, fidelityChartWidth = 50, rule_radius = 7;
-let statWidth = supportRectWidth * 2 + fidelityChartWidth + rule_radius * 2 + 20;
+let statWidth = supportRectWidth * 2 + fidelityChartWidth * 2+ rule_radius * 2 + 20;
 let compWidth = supportRectWidth;
 
 let tot_train;
@@ -49,15 +49,6 @@ let stat_svg3 = d3.select("#stat3")
 let col_svg3 = d3.select("#column_svg3")
     .style("height", `${column_height}px`);
 
-let rule_svg4 = d3.select("#rule_svg4");
-let stat_svg4 = d3.select("#stat4")
-    .style("width", `${statWidth}px`);
-let col_svg4 = d3.select("#column_svg4")
-    .style("height", `${column_height}px`);
-let comp_svg4 = d3.select('#compare4')
-    .style("width", `${compWidth+10}px`)
-    .style("height", `${height + margin.top + margin.bottom}px`);
-
 
 let widthScale, radiusScale, xScale, yScale, colorScale, 
     supportScale, fidelityScale, confScale;
@@ -66,7 +57,7 @@ let barHeight = (rectHeight - rectMarginTop - rectMarginBottom) / 2;
 
 let c = document.getElementById("myCanvas");
 let ctx = c.getContext("2d");
-ctx.font = '10px sans-serif';
+ctx.font = '14px sans-serif';
 
 let selected_range = [];
 let rule_attr_ranges = [];
@@ -75,6 +66,7 @@ let rules_to_keep = [];
 let selected_rule = -1;
 
 let histogram = [];
+let lattice = [];
 
 let param_set = false;
 
@@ -93,6 +85,7 @@ let i = 0,
     node_info,
     max_depth,
     target_names,
+    text_rules,
     graph_nodes, graph_links, graph_link_dict; 
 
 let present_rules, tot_rule;
@@ -107,171 +100,312 @@ let rid2rix = {};
 function loadData() {
     let path = domain + "data/" + folder;
 
-    postData("generate_surrogate_rules/", JSON.stringify({
+    let to_post = {
         "filter_threshold": filter_threshold,
         "dataname": folder,
-    }), (info) => {
+        "debug_class": goal_debug,
+    }
+    if (folder == "user_defined") {
+        existing_files = retrieveSave();
+        to_post["file_key"] = existing_files[existing_files.length-1];
+    }
+    saved_rules = {
+        'max_idx': -1,
+    }
+
+    clear();
+
+    postData("generate_surrogate_rules/", JSON.stringify(to_post), (info) => {
         // remove the progressing
         d3.select('#progress')
             .style("display", "none");
 
         // reset selected rule, filters
         clicked_rule_idx = -1;
-        row_sorted = [false, false, false, false];
+        row_sorted = false;
 
         // rule_similarity = info['rule_similarity'];
         listData = info['rules'];
         tot_rule = info['tot_rule'];
-        mrs_coverage = info['coverage']
+        mrs_coverage = info['coverage'];
+        text_rules = info['text_rules'];
         real_percentile = info["real_percentile"];
 
         node_info = info['node_info_arr'];
         tot_train = node_info[0]['value'][0] + node_info[0]['value'][1];
-        graph_nodes = info['nodes'];
-        graph_links = info['links'];
-        graph_link_dict = {};
-        graph_nodes.forEach(node => {
-            graph_link_dict[node['id']] = [];
-        });
-        graph_links.forEach(link => {
-            graph_link_dict[link['source']].push(link['target']);
+        // graph_nodes = info['nodes'];
+        // graph_links = info['links'];
+        // graph_link_dict = {};
+        // graph_nodes.forEach(node => {
+        //     graph_link_dict[node['id']] = [];
+        // });
+        // graph_links.forEach(link => {
+        //     graph_link_dict[link['source']].push(link['target']);
+        // })
+        lattice = info['lattice']
+        histogram = info['histogram'];
+        let test_content = info['test_content'];
+
+        if (test_content !== undefined) {
+            attrs = test_content["columns"];
+            raw_data = test_content["data"];
+            real_min = test_content["real_min"];
+            real_max = test_content["real_max"];
+            median = test_content["median"];
+            // listData = file2["rule_lists"];
+            target_names = test_content["target_names"];
+            tot_data = test_content['data'].length;
+        } 
+
+        selected_filter = {}
+        render();       
+    })
+}
+
+function clear() {
+    d3.select('#rule_description_selected').html("");
+    d3.select('#selected_desp').html("");
+    d3.select('#selected_stat g').remove();
+}
+
+function render() {
+    present_rules = listData;
+    // summary_nodes = filter_nodes(node_info);
+    
+    // render_matrix(rule_similarity);
+
+    // adjust width and height
+    if (RULE_MODE === MEDIAN_VAL_VIS) {
+        glyphCellWidth *= 2;
+        rectMarginH = 1;
+        rectMarginBottom = 1;
+        rectMarginTop = 1;
+
+        width = attrs.length * (glyphCellWidth + rectMarginH);
+    } else {
+        width = (1+attrs.length) * (glyphCellHeight * filter_threshold['num_bin'] + rectMarginH * 2);
+    }
+
+    height = (listData.length+1) * (glyphCellHeight + rectMarginTop + rectMarginBottom)+ margin.top + margin.bottom;
+
+    // scale for placing cells
+    xScale = d3.scaleBand().domain(d3.range(attrs.length+1))
+        .range([0.5, width]);
+    yScale = d3.scaleBand().domain(d3.range(listData.length+1))
+        .range([0.5, height-margin.bottom]);
+    summary_size_ = d3.scaleLinear()
+        .domain([filter_threshold['support'] , tot_train])
+        .range([5, 35]);
+
+    scroll_functions(width, height, "");
+    scroll_functions(width, height, 4);
+    scroll_data(width, height);
+
+    // scale for render the support bar
+    fidelityScale = d3.scaleLinear().domain([0, 1])
+        .range([0, fidelityChartWidth]);
+    confScale = d3.scaleLinear().domain([0, 1])
+        .range([0, supportRectWidth]);
+    // scale for filling rule ranges
+    // rectHeight = yScale.bandwidth() - rectMarginTop - rectMarginBottom;
+
+    if (BAR) {
+        rectWidth = glyphCellWidth * 5;
+        sqWidth = rectWidth / filter_threshold['num_bin'];
+    } else {
+        sqWidth = glyphCellHeight;
+        rectWidth = sqWidth * filter_threshold['num_bin'];
+    }
+    rectHeight = glyphCellHeight;
+    
+    rectXst = [];
+    d3.range(filter_threshold['num_bin']).forEach(d => {
+        rectXst.push(d * sqWidth)
+    });
+
+    widthScale = [];
+    colorScale = [];
+
+    attrs.forEach((d, i) => {
+        widthScale.push(d3.scaleLinear()
+            .range([0, rectWidth])
+            .domain([real_min[i], real_max[i]]));
+    });
+
+    // render_slider();
+
+    switch (RULE_MODE) {
+        case BAND_RULE_VIS:
+            generate_band_bars(listData);
+            break;
+    }
+
+    render_legend_label("#legend1");
+    // render_summary(summary_nodes, max_depth);
+
+    present_rules = listData;
+    col_order = column_order_by_feat_freq(listData);
+
+    // rule
+    tab_rules[0] = listData;
+
+    // rid and graph_node[id]
+    rid2rix = {};
+    listData.forEach((d, idx) => {
+        rid2rix[d['rid']] = idx;
+    }) 
+
+    construct_lattice();
+
+    update_rule_rendering(rule_svg, col_svg, stat_svg, "", listData, col_order);
+    d3.select("#rule-num")
+        .text(`${listData.length}/ ${tot_rule} (data coverage: ${(mrs_coverage*100).toFixed(2)}%)`);
+  
+    initialize_filters();
+
+    render_lattice();
+    render_list();
+}
+
+function initialize_filters() {
+    // clear
+    d3.selectAll('.feat4filter').remove()
+    d3.selectAll('.feat4filter_default').remove()
+    d3.selectAll('.featval4filter').remove()
+    d3.selectAll('.featval4filter_default').remove()
+    d3.selectAll('.filter-summary').remove()
+
+    // rule fiter: feature names
+    let filter_feat = d3.select('#filter_feat')
+        .attr('value', -1)
+
+    filter_feat.append('option')
+        .attr('value', -1)
+        .attr('class', 'feat4filter_default')
+        .text('-- choose a feature name --')
+
+    let ord_map = {}
+    col_order.forEach((d, i) => ord_map[d] = i);
+    filter_feat.selectAll('.feat4filter')
+        .data(d3.range(attrs.length))
+        .enter()
+        .append('option')
+        .attr('class', 'feat4filter')
+        .attr('value', ix => ord_map[ix])
+        .text(ix=>attrs[ord_map[ix]]);
+
+    d3.select('#filter_feat').on('change', function() {
+        let val = d3.select(this).property('value'),
+            selected_feat = val;
+        // initialize feature value
+        d3.selectAll('.featval4filter').remove();
+
+        let val_options = d3.select('#filter_val')
+            .attr('value', -1)
+
+        if (selected_feat < 0) {
+            return
+        }
+
+        val_options.selectAll('.featval4filter')
+            .data(d3.range(filter_threshold['num_bin']))
+            .enter()
+            .append('option')
+            .attr('class', 'featval4filter')
+            .attr('value', (d,i)=>i)
+            .text((d, i) => {
+                if (i == 0) {
+                    return `[${real_min[selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
+                } else if (i == filter_threshold['num_bin']-1) {
+                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_max[selected_feat]}]`
+                } else {
+                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
+                }
+            })
+
+        select_filter(selected_feat, -1);
+    })
+        
+    // rule filter: feature values
+    d3.select('#filter_val')
+        .append('option')
+        .attr('value', -1)
+        .attr('class', 'featval4filter_default')
+        .text('-- any value --')
+
+    d3.select('#filter_val')
+        .on('change', function() {
+            let feat_ix = d3.select('#filter_feat').property('value'),
+                val_ix = d3.select('#filter_val').property('value');
+            if (feat_ix >= 0) {
+                select_filter(feat_ix, val_ix)
+            }
         })
 
-        d3.queue()
-            .defer(d3.json, path + "/test.json")
-            .defer(d3.json, path + "/histogram.json")
-            .await((err, file1, file3) => {
-                if (err) {
-                    console.log(err);
-                    return;
-                }
-                // assign values
-                attrs = file1["columns"];
-                raw_data = file1["data"];
-                real_min = file1["real_min"];
-                real_max = file1["real_max"];
-                median = file1["median"]
-                
-                target_names = file1["target_names"];
-                tot_data = file1['data'].length;
-                histogram = file3['histogram'];
+    // data filter: feature names
+    let data_filter_feat = d3.select('#data_filter_feat')
+        .attr('value', -1)
 
+    data_filter_feat.append('option')
+        .attr('value', -1)
+        .attr('class', 'feat4filter_default')
+        .text('-- choose a feature name --')
 
-                present_rules = listData;
+    data_filter_feat.selectAll('.feat4filter')
+        .data(d3.range(attrs.length))
+        .enter()
+        .append('option')
+        .attr('class', 'feat4filter')
+        .attr('value', ix => ord_map[ix])
+        .text(ix=>attrs[ord_map[ix]]);
 
-                // adjust width and height
-                if (RULE_MODE === MEDIAN_VAL_VIS) {
-                    glyphCellWidth *= 2;
-                    rectMarginH = 1;
-                    rectMarginBottom = 1;
-                    rectMarginTop = 1;
+    d3.select('#data_filter_feat').on('change', function() {
+        let val = d3.select(this).property('value'),
+            selected_feat = val;
+        // initialize feature value
+        d3.selectAll('.featval4filter').remove();
 
-                    width = attrs.length * (glyphCellWidth + rectMarginH);
+        let val_options = d3.select('#data_filter_val')
+            .attr('value', -1)
+
+        if (selected_feat < 0) {
+            return
+        }
+
+        val_options.selectAll('.featval4filter')
+            .data(d3.range(filter_threshold['num_bin']))
+            .enter()
+            .append('option')
+            .attr('class', 'featval4filter')
+            .attr('value', (d,i)=>i)
+            .text((d, i) => {
+                if (i == 0) {
+                    return `[${real_min[selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
+                } else if (i == filter_threshold['num_bin']-1) {
+                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_max[selected_feat]}]`
                 } else {
-                    width = attrs.length * (glyphCellWidth * 5 + rectMarginH * 2);
+                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
                 }
+            })
 
-                height = listData.length * (glyphCellHeight + rectMarginTop + rectMarginBottom) + margin.top + margin.bottom;
-
-                // scale for placing cells
-                xScale = d3.scaleBand().domain(d3.range(attrs.length+1))
-                    .range([1, width]);
-                yScale = d3.scaleBand().domain(d3.range(listData.length+1))
-                    .range([margin.top, height]);
-
-                scroll_functions(width, height, "");
-                scroll_functions(width, height, 4);
-                scroll_data(width, height);
-
-                // scale for render the support bar
-                fidelityScale = d3.scaleLinear().domain([0, 1])
-                    .range([0, fidelityChartWidth]);
-                confScale = d3.scaleLinear().domain([0, 1])
-                    .range([0, supportRectWidth]);
-                // scale for filling rule ranges
-                // rectHeight = yScale.bandwidth() - rectMarginTop - rectMarginBottom;
-                rectHeight = glyphCellHeight;
-                rectWidth = glyphCellWidth * 5;
-                sqWidth = rectWidth / filter_threshold['num_bin'];
-                rectXst = [];
-                d3.range(filter_threshold['num_bin']).forEach(d => {
-                    rectXst.push(d * sqWidth)
-                });
-
-                widthScale = [];
-                colorScale = [];
-
-                attrs.forEach((d, i) => {
-                    widthScale.push(d3.scaleLinear()
-                        .range([0, rectWidth])
-                        .domain([real_min[i], real_max[i]]));
-
-                    let bin1 = (real_min[i] + real_percentile['percentile_table'][0][i])/2,
-                        bin2 = (real_percentile['percentile_table'][0][i] + real_percentile['percentile_table'][1][i])/2,
-                        bin3 = (real_percentile['percentile_table'][1][i] + real_max[i])/2
-                    colorScale.push(d3.scaleLinear()
-                        // .domain([bin1, bin2, bin3])
-                        .domain([real_min[i], real_percentile['percentile_table'][0][i], real_percentile['percentile_table'][1][i], real_max[i]])
-                        // .range([d3.lab("#91bfdb"),d3.lab("#ffffbf"),d3.lab("#fc8d59")])
-                        // .range(['#f0f0f0', '#969696', '#252525'])
-                        .range(['#636363', '#252525', '#f0f0f0', '#969696',])
-                        // .clamp(true)
-                        .interpolate(d3.interpolateLab)
-                        );
-                });
-
-                // render_slider();
-
-                switch (RULE_MODE) {
-                    case BAND_RULE_VIS:
-                        generate_band_bars(listData);
-                        break;
-                }
-
-                render_legend_label("#legend1");
-                // render_summary(summary_nodes, max_depth);
-
-                // TO BE CHANGED BACK
-                // if (folder !== 'fico_rf') {
-                //     find_leaf_rules(summary_nodes, node_info, 0);
-                // } else {
-                    present_rules = listData;
-                    col_order = column_order_by_feat_freq(listData);
-
-                    // rule
-                    tab_rules[0] = listData;
-                    // update node2rule pos
-                    // node2rule[0] = {};
-                    // rule2node[0] = {};
-                    // listData.forEach((d, idx) => {
-                    //   node2rule[0][d['node_id']] = idx;
-                    //   rule2node[0][idx] = d['node_id'];
-                    //   pre_order[d['node_id']] = {'order': idx, 'max': idx};
-                    // });
-
-                    // rid and graph_node[id]
-                    rid2rix = {};
-                    listData.forEach((d, idx) => {
-                        rid2rix[d['rid']] = idx;
-                    }) 
-
-                    update_rule_rendering(rule_svg, col_svg, stat_svg, "", listData, col_order);
-                    d3.select("#rule-num")
-                        .text(`${listData.length}/ ${tot_rule} (data coverage: ${(mrs_coverage*100).toFixed(2)}%)`);
-                    // update_summary(summary_nodes);
-                // }
-
-                // let summary_info = {
-                //     'support': 0,
-                //     'tp': 0, 'fp': 0, 'tn': 0, 'fn': 0,
-                //     'r-squared': [0, 0]
-                // }
-                // render_stat_summary(summary_info);
-
-                render_graph(graph_nodes, graph_links);
-        });
+        select_data_filter(selected_feat, -1);
     })
 
+    // data filter: feature values
+    d3.select('#data_filter_val')
+        .append('option')
+        .attr('value', -1)
+        .attr('class', 'featval4filter_default')
+        .text('-- any value --')
+
+    d3.select('#data_filter_val')
+        .on('change', function() {
+            let feat_ix = d3.select('#data_filter_feat').property('value'),
+                val_ix = d3.select('#data_filter_val').property('value');
+            if (feat_ix >= 0) {
+                select_data_filter(feat_ix, val_ix)
+            }
+        })
 }
 
 function scroll_functions(width, height, idx) {
@@ -389,7 +523,7 @@ function render_feature_names_and_grid(stat_legend, rule_svg, column_svg, stat_s
         let col_id = d3.select(this)._groups[0][0].id.split('-'),
             tab_idx = parseInt(col_id[1]),
             feat_idx = parseInt(col_id[2]);
-        if (row_sorted[tab_idx]!=='column' || col_clicked !== feat_idx) {
+        if (row_sorted!=='column' || col_clicked !== feat_idx) {
             d3.select(this).select('.highlight-stat')
                 .classed('unselected-stat', true)
                 .classed('highlight-stat', false);
@@ -399,8 +533,8 @@ function render_feature_names_and_grid(stat_legend, rule_svg, column_svg, stat_s
             tab_idx = parseInt(col_id[1]),
             feat_idx = parseInt(col_id[2]);
             
-        if (row_sorted[tab_idx]!=='column' || col_clicked !== feat_idx) {
-            row_sorted[tab_idx] = "column";
+        if (row_sorted!=='column' || col_clicked !== feat_idx) {
+            row_sorted = "column";
             row_order = generate_row_order_by_feature(tab_rules[tab_idx], feat_idx, true);
             col_clicked = feat_idx;
             d3.select(`#header${tab_idx+1}`).selectAll('.mask')
@@ -411,7 +545,7 @@ function render_feature_names_and_grid(stat_legend, rule_svg, column_svg, stat_s
                 .classed('unselected-stat', false)
                 .attr('r', rule_radius);   
         } else {
-            row_sorted[tab_idx] = false;
+            row_sorted = false;
             col_clicked = false;
             d3.select(this).select('.mask')
                 .classed('highlight-stat', false)
@@ -591,7 +725,7 @@ function render_confusion_bars(stat_svg, listData, row_order) {
             if (tab_idx>0) {
                 xoff = -3;
             }
-            if (row_sorted[tab_idx]) {
+            if (row_sorted) {
                 return `translate(${xoff}, ${yScale(row_order[i])})`; 
             }
             return `translate(${xoff}, ${yScale(i)})`; 
@@ -620,7 +754,7 @@ function render_confusion_bars(stat_svg, listData, row_order) {
     //     .attr("stroke", "none");
 
     let circles = res.append('g')
-        .attr('transform', `translate(${xScale.bandwidth()/2}, ${rectHeight})`)
+        .attr('transform', `translate(${20}, ${rectHeight})`)
 
     circles.selectAll('.label_circle').data(d => {
         let data = {0: d3.sum(node_info[d['node_id']]['conf_mat'][0]), 
@@ -638,95 +772,65 @@ function render_confusion_bars(stat_svg, listData, row_order) {
 
     
     // render the confusion matrix
-    // covered instances of label 0, tp
-    let xoffset = 10 + xScale.bandwidth()/2;
-    res.append("rect")
-        .attr("class", "label0_0")
-        .attr("x", xoffset)
-        .attr("y", yScale.bandwidth()/4)
-        .attr("width", d => {
-            if (node_info[d['node_id']] === undefined) {
-                let a = 0;
-                a++;
-            }
-            return confScale(node_info[d['node_id']]['conf_mat'][0][0])
-        })
-        .attr("height", glyphCellHeight)
-        .attr("fill", d => colorCate[0])
+    let stat_bar = res.selectAll('.label_stat')
+        .data((d,i) => {
+            let node_id = r2lattice[i][d['rules'].length-1],
+                size = confScale.range()[1],
+                tot = lattice[node_id]['support'],
+
+            conf_mat = [
+                {'name': 'fp', 
+                    'x': 0, 
+                    'width': lattice[node_id]['conf_mat'][0][1]/tot*size,
+                    'fill': 'url(#fp_pattern)', 
+                    'value': lattice[node_id]['conf_mat'][0][1], 
+                    'ratio': lattice[node_id]['conf_mat'][0][1]/tot, 
+                },
+                {'name': 'tp', 
+                    'x': lattice[node_id]['conf_mat'][0][1]/tot*size, 
+                    'width': lattice[node_id]['conf_mat'][0][0]/tot*size,
+                    'fill': colorCate[0],
+                    'value': lattice[node_id]['conf_mat'][0][0],
+                    'ratio': lattice[node_id]['conf_mat'][0][0]/tot, 
+                },
+                {'name': 'fn', 
+                    'x': d3.sum(lattice[node_id]['conf_mat'][0])/tot*size, 
+                    'width': lattice[node_id]['conf_mat'][1][0]/tot*size,
+                    'fill': 'url(#fn_pattern)',
+                    'ratio': lattice[node_id]['conf_mat'][1][0]/tot, 
+                    'value': lattice[node_id]['conf_mat'][1][0],
+                },
+                {'name': 'tn', 
+                    'x': (d3.sum(lattice[node_id]['conf_mat'][0])+lattice[node_id]['conf_mat'][1][0])/tot*size, 
+                    'width': lattice[node_id]['conf_mat'][1][1]/tot*size,
+                    'fill': colorCate[1],
+                    'value': lattice[node_id]['conf_mat'][1][1],
+                    'ratio': lattice[node_id]['conf_mat'][1][1]/tot, 
+                },
+            ];
+            return conf_mat;
+        }).enter()
+        .append('g')
+        .attr('class', 'label_stat')
+        .attr('transform', `translate(30, ${yScale.bandwidth()/4})`);
+
+    stat_bar.append('rect')
+        .attr('x', d => d.x)
+        .attr('y', d => 0)
+        .attr('width', d => d.width)
+        .attr('height', d => glyphCellHeight)
+        .attr('fill', d => d.fill)
         .append('title')
-            .text(d => node_info[d['node_id']]['conf_mat'][0][0])
+            .text(d => d.value)
 
-    res.append('text')
-        .attr('class', 'label0-text')
-        .attr("x", xoffset+2)
-        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
-        .style('fill', 'white')
-        .text(d => node_info[d['node_id']]['conf_mat'][0][0] > .3 
-            ? Math.floor(node_info[d['node_id']]['conf_mat'][0][0] * d3.sum(node_info[d['node_id']]['value'])) : "")
-
-    // fp
-    res.append("rect")
-        .attr("class", "label0_1")
-        .attr("x", d=>xoffset+confScale(node_info[d['node_id']]['conf_mat'][0][0]))
-        .attr("y", yScale.bandwidth()/4)
-        .attr("width", d => confScale(node_info[d['node_id']]['conf_mat'][0][1]))
-        .attr("height", glyphCellHeight)
-        .attr("fill", d => 'url(#fp_pattern)')
-        .append('title')
-            .text(d => node_info[d['node_id']]['conf_mat'][0][1])
-
-    res.append('text')
-        .attr('class', 'label0-text')
-        .attr("x", d=>2+xoffset+confScale(node_info[d['node_id']]['conf_mat'][0][0]))
-        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
-        .style('fill', 'white')
-        .text(d => node_info[d['node_id']]['conf_mat'][0][1] > .3 
-            ? Math.floor(node_info[d['node_id']]['conf_mat'][0][1] * d3.sum(node_info[d['node_id']]['value'])) : "")
-
-    // covered instances of label 1, true negative
-    res.append("rect")
-        .attr("class", "label1_1")
-        .attr("x", d => xoffset+ confScale(node_info[d['node_id']]['conf_mat'][0][0] 
-            + node_info[d['node_id']]['conf_mat'][0][1]))
-        .attr("y", yScale.bandwidth()/4)
-        .attr("width", d => confScale(node_info[d['node_id']]['conf_mat'][1][1]))
-        .attr("height", glyphCellHeight)
-        .attr("fill", d => colorCate[1])
-        .append('title')
-        .text(d => node_info[d['node_id']]['conf_mat'][1][1])
-
-    res.append('text')
-        .attr('class', 'label1-text')
-        .attr("x", d => 1+xoffset+ confScale(node_info[d['node_id']]['conf_mat'][0][0] 
-            + node_info[d['node_id']]['conf_mat'][0][1]))
-        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
-        .style('fill', 'white')
-        .text(d => node_info[d['node_id']]['conf_mat'][1][1] > .3 
-            ? Math.floor(node_info[d['node_id']]['conf_mat'][1][1] * d3.sum(node_info[d['node_id']]['value'])) : "")
-
-    // false negative
-    res.append("rect")
-        .attr("class", "label1_1")
-        .attr("x", d => xoffset+ confScale(node_info[d['node_id']]['conf_mat'][0][0] 
-            + node_info[d['node_id']]['conf_mat'][0][1] + node_info[d['node_id']]['conf_mat'][1][1]))
-        .attr("y", yScale.bandwidth()/4)
-        .attr("width", d => confScale(node_info[d['node_id']]['conf_mat'][1][0]))
-        .attr("height", glyphCellHeight)
-        .attr("fill", `url(#fn_pattern)`)
-        .append('title')
-        .text(d => node_info[d['node_id']]['conf_mat'][1][0])
-
-    res.append('text')
-        .attr('class', 'label1-text')
-        .attr("x", d => 1+xoffset+ confScale(node_info[d['node_id']]['conf_mat'][0][0] 
-            + node_info[d['node_id']]['conf_mat'][0][1] + node_info[d['node_id']]['conf_mat'][1][1]))
-        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
-        .style('fill', 'white')
-        .text(d => node_info[d['node_id']]['conf_mat'][1][0] > .3 
-            ? Math.floor(node_info[d['node_id']]['conf_mat'][1][0] * d3.sum(node_info[d['node_id']]['value'])) : "")
+    stat_bar.append('text')
+        .attr('x', d => d.x+2)
+        .attr('y', 2 + glyphCellHeight /2)
+        .attr('fill', 'white')
+        .text(d => d.ratio > .2 ? d.value : "")
 
     // overall support
-    xoffset += supportRectWidth + 10;
+    let xoffset = 30 + supportRectWidth + 10;
     let max_support = d3.max(listData, d => d3.sum(node_info[d['node_id']]['value']))
     let tot_support = d3.sum(node_info[0]['value']);
     supportScale = d3.scaleLinear()
@@ -764,9 +868,29 @@ function render_confusion_bars(stat_svg, listData, row_order) {
         // .text(d => `${d3.sum(node_info[d['node_id']]['value'])}`)
         .text(d => `${Math.floor(node_info[d['node_id']]['support']*tot_support)}`)
 
+    // accuracy
+    xoffset += supportRectWidth;
+    res.append('text')
+        .attr('class', 'label1-text')
+        .attr("x", xoffset + 10)
+        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
+        .style('fill', 'black')
+        .text(d => {
+            let matched = 0,
+                node_id = r2lattice[i][d['rules'].length-1],
+                size = confScale.range()[1],
+                tot = lattice[node_id]['support'];
+
+            for (let x = 0; x < lattice[node_id]['conf_mat'].length; x++) {
+                matched += lattice[node_id]['conf_mat'][x][x];
+            }
+            node_info[d['node_id']]['accuracy'] = matched / tot;
+      
+            return `${d3.format('.2%')(node_info[d['node_id']]['accuracy'])}`
+        });
 
     // fidelity
-    xoffset += supportRectWidth;
+    xoffset += fidelityChartWidth;
     res.append('text')
         .attr('class', 'label1-text')
         .attr("x", xoffset + 10)
@@ -852,7 +976,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
 
     let circle_area = res.append('g')
         .attr('id', `stat_legend_circle_${tab_idx}`)
-        .attr('transform', `translate(${xScale.bandwidth()/2}, ${rectHeight/2})`)
+        .attr('transform', `translate(${20}, ${rectHeight/2})`)
 
     circle_area.selectAll('.rule_pred')
         .data(data_ready)
@@ -871,54 +995,10 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         .classed('mask', true)
         .attr('r', rule_radius)
 
-    circle_area.on('mouseover', function (){
-        d3.select(this).select('.mask')
-            .classed('unselected-stat', false)
-            .classed('highlight-stat', true)
-            .style('stroke-width', '1.5px');
-    }).on('mouseout', function() {
-        let stat_id = d3.select(this)._groups[0][0].id,
-            tab_idx = parseInt(stat_id[stat_id.length-1]);
-        if (row_sorted[tab_idx]!=='label') {
-            d3.select(this).select('.highlight-stat')
-                .classed('unselected-stat', true)
-                .classed('highlight-stat', false);
-        } else {
-            d3.select(this).select('.highlight-stat')
-                .style('stroke-width', '1px');
-        }
-    }).on('click', function() {
-        let stat_id = d3.select(this)._groups[0][0].id,
-            tab_idx = parseInt(stat_id[stat_id.length-1]);
-            
-        if (row_sorted[tab_idx]!=='label') {
-            row_sorted[tab_idx] = "label";
-            col_clicked = false;
-            row_order = generate_row_order_by_label(tab_rules[tab_idx]);
-            d3.select(this.parentNode).selectAll('.mask')
-                        .classed('highlight-stat', false)
-                        .classed('unselected-stat', true);
+    let xoffset = 10 + 20;
 
-            d3.select(this).select('.mask')
-                .classed('highlight-stat', true)
-                .classed('unselected-stat', false)
-                .attr('r', rule_radius);   
-        } else {
-            row_sorted[tab_idx] = false;
-            d3.select(this).select('.mask')
-                .classed('highlight-stat', false)
-                .classed('unselected-stat', true);
-        }
-        update_rule_rendering(rule_svg, col_svg, stat_svg, tab_id, tab_rules[tab_idx], row_order,)
-    });
-
-    // render the confusion matrix
-    // covered instances of label 0, tp
-
-    let xoffset = 10 + xScale.bandwidth()/2;
-
-    let fill_arr = [colorCate[0], 'url(#fp_pattern)', colorCate[1], 'url(#fn_pattern)'],
-        text_arr = ['tp', 'fp', 'tn', 'fn'];
+    let fill_arr = ['url(#fp_pattern)', colorCate[0], 'url(#fn_pattern)', colorCate[1],],
+        text_arr = ['fp', 'tp', 'fn', 'tn'];
 
     for (let i = 0; i < 4; i++) {
         let conf_g = res.append('g')
@@ -930,11 +1010,11 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
             .attr("height", glyphCellHeight)
             .attr("fill", fill_arr[i]);
 
-        conf_g.append('text')
-            .attr("x", 2)
-            .attr("y", rectMarginTop+3)
-            .style('fill', 'white')
-            .text(text_arr[i]);
+        // conf_g.append('text')
+        //     .attr("x", 2)
+        //     .attr("y", rectMarginTop+3)
+        //     .style('fill', 'white')
+        //     .text(text_arr[i]);
 
         conf_g.append('rect')
             .classed('mask', true)
@@ -951,7 +1031,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
                 let stat_str = d3.select(this)._groups[0][0].id.split('_'),
                     tab_idx = stat_str[2],
                     conf_idx = stat_str[3];
-                if (row_sorted[tab_idx]!==`conf_${conf_idx}`) {
+                if (row_sorted!==`conf_${conf_idx}`) {
                     d3.select(this).select('.highlight-stat')
                         .classed('unselected-stat', true)
                         .classed('highlight-stat', false);
@@ -964,8 +1044,8 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
                     tab_idx = stat_str[2],
                     conf_idx = stat_str[3];
 
-                if (row_sorted[tab_idx]!==`conf_${conf_idx}`) {
-                    row_sorted[tab_idx] = `conf_${conf_idx}`;
+                if (row_sorted!==`conf_${conf_idx}`) {
+                    row_sorted = `conf_${conf_idx}`;
                     col_clicked = false;
                     row_order = generate_row_order_by_confmat(tab_rules[tab_idx], conf_idx);
                     d3.select(this.parentNode).selectAll('.mask')
@@ -977,7 +1057,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
                         .classed('unselected-stat', false)
                         .attr('r', rule_radius);   
                 } else {
-                    row_sorted[tab_idx] = false;
+                    row_sorted = false;
                     d3.select(this).select('.mask')
                         .classed('highlight-stat', false)
                         .classed('unselected-stat', true);
@@ -1027,7 +1107,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
     }).on('mouseout', function() {
         let stat_id = d3.select(this)._groups[0][0].id,
             tab_idx = parseInt(stat_id[stat_id.length-1]);
-        if (row_sorted[tab_idx]!=='support') {
+        if (row_sorted!=='support') {
             d3.select(this).select('.highlight-stat')
                 .classed('unselected-stat', true)
                 .classed('highlight-stat', false);
@@ -1036,8 +1116,8 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         let stat_id = d3.select(this)._groups[0][0].id,
             tab_idx = parseInt(stat_id[stat_id.length-1]);
             
-        if (row_sorted[tab_idx]!=='support') {
-            row_sorted[tab_idx] = "support";
+        if (row_sorted!=='support') {
+            row_sorted = "support";
             col_clicked = false;
             row_order = generate_row_order_by_key(tab_rules[tab_idx], 'support');
             d3.select(this.parentNode).selectAll('.mask')
@@ -1048,7 +1128,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
                 .classed('unselected-stat', false)
                 .attr('r', rule_radius);   
         } else {
-            row_sorted[tab_idx] = false;
+            row_sorted = false;
             d3.select(this).select('.mask')
                 .classed('highlight-stat', false)
                 .classed('unselected-stat', true);
@@ -1056,16 +1136,71 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         update_rule_rendering(rule_svg, col_svg, stat_svg, tab_id, tab_rules[tab_idx], row_order,)
     });
 
+    // accuracy 
+    xoffset += supportRectWidth;
+    let accuracy_g = res.append('g')
+        .attr('transform', `translate(${xoffset}, ${rectHeight/4})`)
+        .attr('id', `stat_legend_accuracy_${tab_idx}`)
+
+    accuracy_g.append('text')
+        .attr('class', 'label1-text')
+        .attr("x", 3)
+        .attr('y', rectMarginTop+3)
+        .style('fill', 'black')
+        .text("accuracy");
+
+    accuracy_g.append('rect')
+        .classed('unselected-stat', true)
+        .classed('mask', true)
+        .attr('x', 3)
+        .attr('width', supportRectWidth * .8)
+        .attr('height', glyphCellHeight);
+
+    accuracy_g.on('mouseover', function (){
+        d3.select(this).select('.mask')
+            .classed('unselected-stat', false)
+            .classed('highlight-stat', true);
+    }).on('mouseout', function() {
+        let stat_id = d3.select(this)._groups[0][0].id,
+            tab_idx = parseInt(stat_id[stat_id.length-1]);
+        if (row_sorted!=='accuracy') {
+            d3.select(this).select('.highlight-stat')
+                .classed('unselected-stat', true)
+                .classed('highlight-stat', false);
+        }
+    }).on('click', function() {
+        let stat_id = d3.select(this)._groups[0][0].id,
+            tab_idx = parseInt(stat_id[stat_id.length-1]);
+            
+        if (row_sorted!=='accuracy') {
+            row_sorted = "accuracy";
+            col_clicked = false;
+            row_order = generate_row_order_by_key(tab_rules[tab_idx], 'accuracy');
+            d3.select(this.parentNode).selectAll('.mask')
+                        .classed('highlight-stat', false)
+                        .classed('unselected-stat', true);
+            d3.select(this).select('.mask')
+                .classed('highlight-stat', true)
+                .classed('unselected-stat', false)
+                .attr('r', rule_radius);   
+        } else {
+            row_sorted = false;
+            d3.select(this).select('.mask')
+                .classed('highlight-stat', false)
+                .classed('unselected-stat', true);
+        }
+        update_rule_rendering(rule_svg, col_svg, stat_svg, tab_id, tab_rules[tab_idx], row_order,)
+    });
 
     // fidelity 
-    xoffset += supportRectWidth;
+    xoffset += fidelityChartWidth;
     let fidelity_g = res.append('g')
         .attr('transform', `translate(${xoffset}, ${rectHeight/4})`)
         .attr('id', `stat_legend_fidelity_${tab_idx}`)
 
     fidelity_g.append('text')
         .attr('class', 'label1-text')
-        .attr("x", 10)
+        .attr("x", 7)
         .attr('y', rectMarginTop+3)
         .style('fill', 'black')
         .text("fidelity");
@@ -1073,8 +1208,8 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
     fidelity_g.append('rect')
         .classed('unselected-stat', true)
         .classed('mask', true)
-        .attr('x', 8)
-        .attr('width', supportRectWidth * .65)
+        .attr('x', 3)
+        .attr('width', supportRectWidth * .6)
         .attr('height', glyphCellHeight);
 
     fidelity_g.on('mouseover', function (){
@@ -1084,7 +1219,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
     }).on('mouseout', function() {
         let stat_id = d3.select(this)._groups[0][0].id,
             tab_idx = parseInt(stat_id[stat_id.length-1]);
-        if (row_sorted[tab_idx]!=='fidelity') {
+        if (row_sorted!=='fidelity') {
             d3.select(this).select('.highlight-stat')
                 .classed('unselected-stat', true)
                 .classed('highlight-stat', false);
@@ -1093,8 +1228,8 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         let stat_id = d3.select(this)._groups[0][0].id,
             tab_idx = parseInt(stat_id[stat_id.length-1]);
             
-        if (row_sorted[tab_idx]!=='fidelity') {
-            row_sorted[tab_idx] = "fidelity";
+        if (row_sorted!=='fidelity') {
+            row_sorted = "fidelity";
             col_clicked = false;
             row_order = generate_row_order_by_key(tab_rules[tab_idx], 'fidelity');
             d3.select(this.parentNode).selectAll('.mask')
@@ -1105,7 +1240,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
                 .classed('unselected-stat', false)
                 .attr('r', rule_radius);   
         } else {
-            row_sorted[tab_idx] = false;
+            row_sorted = false;
             d3.select(this).select('.mask')
                 .classed('highlight-stat', false)
                 .classed('unselected-stat', true);
@@ -1117,6 +1252,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
 function main() {
     d3.select('#progress')
         .style("display", "block");
+
     loadData();
     param_set = true;
 }

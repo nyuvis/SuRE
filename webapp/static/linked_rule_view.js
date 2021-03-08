@@ -1,4 +1,4 @@
-let BAR = true, MOSAIC = false;
+let BAR = false, MOSAIC = true;
 let clicked_rule_idx = -1;
 
 function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_order,) 
@@ -11,7 +11,7 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
     rule_svg.selectAll("defs").remove();
 
     // re-render column lines
-    height = listData.length * (glyphCellHeight + rectMarginTop + rectMarginBottom) + margin.top + margin.bottom;
+    height = (1+listData.length) * (glyphCellHeight + rectMarginTop + rectMarginBottom) + margin.top + margin.bottom;
     rule_svg
         .attr("width", width + margin.right + margin.left)
         .attr("height", height + margin.top + margin.bottom);
@@ -25,9 +25,9 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
     d3.select(`#stat_div${idx} div`)
         .style("height", `${height + margin.bottom}px`);
 
-    // scale for placing cells
+    // update scale for placing cells
     let yScale = d3.scaleBand().domain(d3.range(listData.length+1))
-        .range([margin.top, height]),
+            .range([margin.top+.5, height-margin.bottom]),
         tab_idx = idx !== "" ? idx-1 : 0;
 
     render_feature_names_and_grid(stat_legend, rule_svg, col_svg, stat_svg, idx, col_order);
@@ -39,7 +39,7 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
         .attr("class", "row")
         .attr("id", (d, i) => `ruleg-${idx}-${i}`)
         .attr("transform", function(d, i) { 
-            if (row_sorted[tab_idx]) {
+            if (row_sorted) {
                 return `translate(${rectMarginH}, ${yScale(row_order[i])+rectMarginTop})`; 
             }
             return `translate(${rectMarginH}, ${yScale(i)+rectMarginTop})`; 
@@ -56,10 +56,10 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
                 click_rule(d3.select(this), r_i, d, idx);
             }
         })
-        .on('dblclick', function(d, r_i) {
-            d3.select(this).select('.back-rect')
-                .classed('rule_highlight', false);
-        })
+        // .on('dblclick', function(d, r_i) {
+        //     d3.select(this).select('.back-rect')
+        //         .classed('rule_highlight', false);
+        // })
 
     // render the white background for better click react
     row.append('rect')
@@ -157,7 +157,7 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
             .attr("y",  0)
             .attr("height", glyphCellHeight)
             .attr("fill", d => d['show'] ? "#484848": 'white')
-            .attr("stroke", "black");
+            .attr("stroke", "darkgrey");
     } else {
         generate_value_cells(row);
     }
@@ -165,19 +165,21 @@ function update_rule_rendering(rule_svg, col_svg, stat_svg, idx, listData, row_o
     // grid
     rule_svg.selectAll(".grid-row")
         .data(d3.range(listData.length+1))
+        // .data([0, listData.length])
         .enter().append("g")
         .attr("class", "grid-row")
-        .attr("transform", function(idx) { return `translate(0, ${margin.top + yScale.bandwidth() * idx})`; })
+        .attr("transform", function(idx, ix) { return `translate(0, ${margin.top + yScale(idx)})`; })
         .append("line")
         .attr("x1", 0)
         .attr("x2", width-xScale.bandwidth())
         .style("stroke", gridColor);
 
     rule_svg.selectAll(".grid-col")
+        // .data([0, attrs.length])
         .data(xScale.domain())
         .enter().append("g")
         .attr("class", "grid-col")
-        .attr("transform", function(d, i) { return `translate(${xScale(i)}, ${margin.top})`; })
+        .attr("transform", function(i, idx) { return `translate(${xScale(i)}, ${margin.top})`; })
         .append("line")
         .attr("y1", 0)
         .attr("y2", yScale(listData.length))
@@ -199,27 +201,8 @@ function rule_unhover(idx, r_i) {
     d3.selectAll('.rule_hover')
         .classed('rule_hover', false)
 
-    d3.select('#rule_description').selectAll('p').remove();
-
-    if (idx == '') {
-        let source = listData[r_i]['rid'];
-        d3.select(`#node-${source}`)
-            .style('stroke', 'white')
-            .style('stroke-width', '.5px');
-        graph_link_dict[source].forEach(target => {
-            d3.select(`#link-${source}-${target}`)
-                .style('stroke-opacity', '0.2');
-        });
-
-        graph_nodes.forEach(node => {
-            if (node['id']===source || graph_link_dict[source].indexOf(node['id'])>=0 ) {
-                return;
-            }
-            d3.select(`#node-${node['id']}`)
-                .style('fill', colorCate[node['pred']])
-                .style('fill-opacity', 1);
-        })
-    }
+    d3.select('#rule_description_hovered').selectAll('p').remove();
+    d3.select('#rule_stat_hovered').select('g').remove();
 }
 
 function generate_value_cells(row,) {
@@ -295,7 +278,7 @@ function render_comparison_bar(comp_svg, idx, row_order, compare_data) {
         .enter().append("g")
         .attr("class", "support")
         .attr("transform", function(d, i) { 
-            if (row_sorted[tab_idx]) {
+            if (row_sorted) {
                 return `translate(0, ${yScale(row_order[i])+rectMarginTop})`; 
             }
             return `translate(0, ${yScale(i)+rectMarginTop})`; 
@@ -331,15 +314,6 @@ function render_comparison_bar(comp_svg, idx, row_order, compare_data) {
                 'color': '#cccccc'
             });
 
-            // // target_unique
-            // temp.push({'x': widthScale(d.same), 
-            //     'width': widthScale(d.target_unique)-5,
-            //     'color': '#969696'});
-
-            // // rule unique
-            // temp.push({'x': widthScale(d.same+d.target_unique), 
-            //     'width': widthScale(d.rule_unique)-5,
-            //     'color': '#cccccc'});
             return temp;
         })
         .enter()
@@ -350,12 +324,6 @@ function render_comparison_bar(comp_svg, idx, row_order, compare_data) {
         .attr("y",  0)
         .attr("height", rectHeight)
         .attr("fill", d => d.color);
-
-    // row.append('text')
-    //     .attr("x", 10)
-    //     .attr("y", rectMarginTop+3)
-    //     .style('fill', 'black')
-    //     .text(d => d.same);
 }
 
 

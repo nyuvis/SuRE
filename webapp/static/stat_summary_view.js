@@ -201,28 +201,28 @@ function render_histogram() {
             `translate(${col_order[i]*hist_span+rectMarginH}, ${yScale(0)+font_size*2})`);
 
     stepWidth = hist_width / 10;
-    histEnter.append('rect')
-        .style('width', hist_width)
-        .style('height', hist_height)
-        .style('fill', 'none')
-        .style('stroke', 'dimgrey')
+//     histEnter.append('rect')
+//         .style('width', hist_width)
+//         .style('height', hist_height)
+//         .style('fill', 'none')
+//         .style('stroke', 'dimgrey')
 
-    histEnter.selectAll('.hist_rect')
-        .data(d=> d['hist'])
-        .enter()
-        .append('rect')
-        .attr('class', 'hist_rect')
-        .style('x', (d, i) => i * stepWidth)
-        .style('y', d => hist_height - y(d))
-        .style('width', stepWidth)
-        .style('height', d => y(d))
-        .style('fill', 'darkgrey');
-    histEnter.append('line')
-        .attr('x1', 0)
-        .attr('x2', rectWidth)
-        .attr('y1', hist_height)
-        .attr('y2', hist_height)
-        .style('stroke', 'darkgrey')
+//     histEnter.selectAll('.hist_rect')
+//         .data(d=> d['hist'])
+//         .enter()
+//         .append('rect')
+//         .attr('class', 'hist_rect')
+//         .style('x', (d, i) => i * stepWidth)
+//         .style('y', d => hist_height - y(d))
+//         .style('width', stepWidth)
+//         .style('height', d => y(d))
+//         .style('fill', 'darkgrey');
+//     histEnter.append('line')
+//         .attr('x1', 0)
+//         .attr('x2', rectWidth)
+//         .attr('y1', hist_height)
+//         .attr('y2', hist_height)
+//         .style('stroke', 'darkgrey')
 }
 
 

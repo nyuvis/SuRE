@@ -5,18 +5,22 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.cluster.hierarchy import ward, leaves_list
 from scipy.spatial.distance import pdist
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.utils import resample
 
 class tree_node_info:
-    def initialize(self, X, y, y_pred, attrs, filter_threshold, num_bin, verbose=False):
+    def initialize(self, X, y, y_pred, attrs, filter_threshold, num_bin, debug_class, dataname=None, verbose=False):
         self.verbose = verbose
+        self.X = X
         self.cate_X = self.get_cate_X(X, num_bin)
         self.real_min = np.min(X, axis=0)
         self.real_max = np.max(X, axis=0)
-        self.y = y
-        self.y_pred = y_pred
+        self.y = y.astype(int)
+        self.y_pred = y_pred.astype(int)
         self.attrs = attrs
         self.filter_threshold = filter_threshold
         self.num_bin = num_bin
+        self.debug_class = debug_class
+        self.dataname = dataname
         return self
 
     def get_cate_X(self, X, num_bin):
@@ -35,7 +39,7 @@ class tree_node_info:
         cate_X = np.transpose(np.array(cate_X))
         if (self.verbose):
             print("***** finish transforming ordinal data *****")
-        return cate_X
+        return cate_X 
 
     def transform_func(self, col_idx, ele, num_bin):
         for i in range(num_bin-1):
@@ -43,15 +47,35 @@ class tree_node_info:
                 return i
         return num_bin-1
 
+    def prepare_for_debug_training(self):
+        self.label = np.zeros(shape=self.y.shape)
+        for pred in range(2):
+            for gt in range(2):
+                res =  (self.y == gt) & (self.y_pred == pred)
+                idx = [i for i, val in enumerate(res) if val]
+                self.label[idx] = pred * 2 + gt
+ 
     def train_surrogate_random_forest(self):
-        rfc=RandomForestClassifier(random_state=1234, n_estimators=100, )
-        rfc.fit(self.cate_X, self.y_pred)
-        importances = rfc.feature_importances_
+        # if (self.dataname == 'loan'):
+        #     self.rfc=RandomForestClassifier(random_state=1234, n_estimators=30, )
+        # else:
+        self.rfc=RandomForestClassifier(random_state=1234, n_estimators=100, )
+
+        if (self.debug_class >= 0):
+            self.prepare_for_debug_training()
+            self.rfc.fit(self.cate_X, self.label)
+            if (self.verbose):
+                print("***** finish training surrogate random forest *****")
+                print("surrogate overall fidelity:", self.rfc.score(self.cate_X, self.label))
+        else:
+            self.rfc.fit(self.cate_X, self.y_pred)
+            if (self.verbose):
+                print("***** finish training surrogate random forest *****")
+                print("surrogate overall fidelity:", self.rfc.score(self.cate_X, self.y_pred))
+
+        importances = self.rfc.feature_importances_
         print(importances)
-        self.rfc = rfc
-        if (self.verbose):
-            print("***** finish training surrogate random forest *****")
-            print("surrogate overall fidelity:", self.rfc.score(self.cate_X, self.y_pred))
+        
         return self
 
     def tree_pruning(self):
@@ -79,7 +103,10 @@ class tree_node_info:
         self.threshold = estimator.tree_.threshold
         self.value = estimator.tree_.value
         # value: number of training samples that has the label of class_id falling into this node
-        self.value = self.value.reshape(len(self.value),2)
+        if (self.debug_class < 0):
+            self.value = self.value.reshape(len(self.value),2)
+        else:
+            self.value = self.value.reshape(len(self.value),4)
 
         self.initialize_node_info()
         self.initialize_node_info_with_stat(estimator)
@@ -169,7 +196,6 @@ class tree_node_info:
             leave_index: the index of leaves that instances fall into.
             leave_pred: the prediction of surrogate tree.
         '''
-
         leave_index = estimator.apply(self.cate_X)
         leave_pred = estimator.predict(self.cate_X)
 
@@ -184,8 +210,9 @@ class tree_node_info:
             self.node_gt[node_id][self.y[idx]] += 1
             self.node_bb_gt[node_id][self.y_pred[idx]] += (self.y_pred[idx]==self.y[idx])
             self.node_conf[node_id][self.y_pred[idx]][self.y[idx]] += 1 
-        for node_id in self.leaves: 
             self.node_pred[node_id] = np.argmax(self.value[node_id])
+            if (self.debug_class >= 0):
+                self.node_pred[node_id] = self.node_pred[node_id] // 2
 
         ''' initialize the marks on the root'''
         self.node_feat_mark[0][self.feature[0]] = 1
@@ -211,14 +238,16 @@ class tree_node_info:
         self.go_through_a_tree(right_child)
         ''' processing '''
         self.node_matched[node_id] = self.node_matched[left_child] + self.node_matched[right_child]
-        for class_id in range(self.value.shape[1]):
+        for class_id in range(2):
             self.node_bb[node_id][class_id] = self.node_bb[left_child][class_id] + self.node_bb[right_child][class_id]
             self.node_gt[node_id][class_id] = self.node_gt[left_child][class_id] + self.node_gt[right_child][class_id]
             self.node_bb_gt[node_id][class_id] = self.node_bb_gt[left_child][class_id] + self.node_bb_gt[right_child][class_id]
-            for gt_id in range(self.value.shape[1]):
+            for gt_id in range(2):
                 self.node_conf[node_id][class_id][gt_id] = self.node_conf[left_child][class_id][gt_id] + self.node_conf[right_child][class_id][gt_id]
     
         self.node_pred[node_id] = np.argmax(self.value[node_id])
+        if (self.debug_class >= 0):
+            self.node_pred[node_id] = self.node_pred[node_id] // 2
         ''' redefine node_feat_mark '''
         if (node_id > 0):
             self.node_feat_mark[node_id] = self.node_feat_mark[self.parent[node_id]]
@@ -242,10 +271,19 @@ class tree_node_info:
         node_info["accuracy"] = 0
 
         if (self.node_matched[node_id] > 0):
-            node_info['fidelity'] = float(self.node_bb[node_id][self.node_pred[node_id]] / self.node_matched[node_id])
+            if (self.debug_class < 0):
+                node_info['fidelity'] = float(self.node_bb[node_id][self.node_pred[node_id]] / self.node_matched[node_id])
+            else:
+                pred = np.argmax(self.value[node_id])
+                node_info['fidelity'] = float(self.node_conf[node_id][pred//2][pred%2] / self.node_matched[node_id])
+               
         if (self.node_bb[node_id][self.node_pred[node_id]] > 0):
             node_info['accuracy'] = float(self.node_bb_gt[node_id][self.node_pred[node_id]] / self.node_bb[node_id][self.node_pred[node_id]])
         self.node_info_dict[node_id] = node_info
+
+        if (node_info['fidelity'] >= self.filter_threshold['fidelity']):
+            self.leaves.append(node_id)
+            return
 
         res1 = []
         res2 = []
@@ -253,8 +291,8 @@ class tree_node_info:
             res1 = self.derive_tree_data(self.children_right[node_id], node_id, ">", dep+1)
         if (self.children_left[node_id] >= 0):
             res2 = self.derive_tree_data(self.children_left[node_id], node_id, "<=", dep+1)
-        if (res1 == [] and res2 == [] and node_info['fidelity'] >= self.filter_threshold['fidelity']):
-            self.leaves.append(node_id)
+        # if ((res1 == [] or res2 == []) and node_info['fidelity'] >= self.filter_threshold['fidelity'] and self.node_info_dict[self.parent[node_id]]['fidelity']<self.filter_threshold['fidelity']):
+        #     self.leaves.append(node_id)
         return self
 
 class forest():
@@ -342,10 +380,11 @@ class forest():
     def node_equals(self, a, b):
         return (a['feature'] == b['feature'] and a['sign'] == b['sign'] and a['threshold'] == b['threshold'])
 
+
     def update_subtree_node(self, common_ancestor, tree_idx, path, path_node_pos):
         self.tree_node_dict[common_ancestor]['children_id'].append(self.max_id+1)
         # update common ancestor
-        self.tree_node_dict[common_ancestor]['support'] += self.trees[tree_idx][path[path_node_pos]]['support']
+        self.tree_node_dict[common_ancestor]['support'] = self.trees[tree_idx][path[path_node_pos]]['support']
 
         # update child nodes
         parent_id = common_ancestor
@@ -461,112 +500,15 @@ class forest():
                 node_id = p_id
             rules = []
             for j in range(len(feature_range)):
-                rule_str = self.attrs[j]
                 # summarize the condition
                 if (feature_range[j][0]!=0 or feature_range[j][1]!=num_bin-1):                    
                     new_cond = self.translate_rule(feature_range[j], j)
-                    # if (debug_id == 61):
-                    #     print(feature_range[j])
-                    #     print(new_cond)
                     rules.append(new_cond)
+    
+            pred_label = np.argmax(self.tree_node_dict[self.leaves[i]]['value'])
+
             rule_lists.append({
-                "label": int(np.argmax(self.tree_node_dict[self.leaves[i]]['value'])),
+                "label": int(pred_label),
                 "node_id": int(self.leaves[i]),
                 "rules": rules,})
         self.rule_lists = rule_lists
-
-class forest_rules():
-    def initialize(self, df, rules, real_min, real_max):
-        self.df = df
-        cols = self.df.columns
-        self.real_min = real_min
-        self.real_max = real_max
-        self.rule_matched_table = np.zeros(shape=(len(rules), self.df.shape[0]))
-        self.rules = rules
-        rid = 0
-        for rule in rules:
-            conds = rule['rules']
-            matched_data = pd.DataFrame(self.df)
-            for cond in conds:
-                col = cols[cond['feature']]
-                if (cond['sign'] == '<='):    
-                    if (cond['threshold'] == self.real_max[cond['feature']] and 
-                        cond['threshold']!=self.rep_range[cond['feature']][-1][1]):
-                        matched_data = matched_data[matched_data[col] <= cond['threshold']]
-                    else:
-                        matched_data = matched_data[matched_data[col] < cond['threshold']]
-                elif (cond['sign'] == '>'):
-                    matched_data = matched_data[matched_data[col] >= cond['threshold']]
-                elif (cond['sign'] == 'range'):
-                    matched_data = matched_data[(matched_data[col] >= cond['threshold0']) & (matched_data[col] < cond['threshold1'])]
-                else:
-                    print("!!!!!! Error rule !!!!!!")
-            matched_index = matched_data.index.values.astype(int)
-            self.rule_matched_table[rid, matched_index] = 1
-            rid += 1
-
-
-    def find_the_min_set(self):
-        # initialize distance
-        # D[i] means how many instances that rule i can cover but are not covered by rules in the targe set
-        target_set = []
-        D = {i: self.rule_matched_table[i].sum() for i in range(len(self.rules))}
-        target_matched_vector = np.zeros(shape=self.df.shape[0])
-
-        # find the most differet rule every time, 
-        # until all instances are covered, or cannot cover new instances
-        go_on = True
-        rid = max(D, key=D.get)
-        while (go_on):
-            target_set.append(rid)
-            target_matched_vector = np.logical_or(target_matched_vector, self.rule_matched_table[rid])
-            del D[rid]
-            if (len(D) == 0):
-                go_on = False
-            else:
-                # update distance to target set
-                D = {key: np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum() for key in D}
-                rid = max(D, key=D.get)
-                if (D[rid] == 0):
-                    go_on = False
-        # get the row order
-        hierarchy_leaves = self.hierarchical_clustering(target_set)
-        # get coverage
-        self.coverage = float(target_matched_vector.sum()) / target_matched_vector.shape[0]
-        return target_set
-
-    def hierarchical_clustering(self, target_set):
-        # construct vectors of rules for clusters
-        vectors = []
-        for rid in target_set:
-            vect = np.ones(shape=self.df.shape[1])
-            vect = np.negative(vect)
-            for d in self.rules[rid]['rules']:
-                vmin = self.real_min[d['feature']]
-                vmax = self.real_max[d['feature']]
-                if (d['sign'] == '<='):
-                    vmax = d['threshold']
-                elif (d['sign'] == '>'):
-                    vmin = d['threshold']
-                else:
-                    vmin = d['threshold0']
-                    vmax = d['threshold1']
-                med = (vmin + vmax) / 2
-                val = (med-self.real_min[d['feature']]) / (self.real_max[d['feature']] - self.real_min[d['feature']])
-                vect[d['feature']] = val
-            vectors.append(vect)
-        X = np.array(vectors)
-        # clustering
-        Z = ward(pdist(X))
-        self.Z = Z
-        leaves = leaves_list(Z)
-        return leaves
-
-
-
-
-
-
-
-
-    

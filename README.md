@@ -2,13 +2,7 @@
 
 SuRE is an interactive user interface for visual exploration of surrogate rules that describe a black-box model’s behaviors on different groups of instances.
 
-![image](https://user-images.githubusercontent.com/9759891/88327894-9a89d700-ccf5-11ea-929f-812673fc257f.png)
-
-
-
-Please watch this [video](https://www.youtube.com/watch?v=kskukXg1X3s&feature=youtu.be) for an introduction and demo.
-
-You can also play with the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) using pre-defined data.
+You can also play with the [demo](http://nyuvis-web.poly.edu/projects/isure) using pre-defined data.
 
 ## Repository Structure
 
@@ -34,22 +28,13 @@ Because the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) needs t
 - Step 2: You can run the code in [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data%2Btraining.ipynb) to read your own data, train a SVM model on the fly, and then generate the formatted data with both your data and the SVM model predictions on your data. 
   - If you want to use the model prediction of your own model, you can run the code in [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data_without_training.ipynb). 
   - You may want to change some columns or variables according to your own needs
-- Step 3: Open the [live demo](http://nyuvis-web.poly.edu/projects/isure/index.html) and choose the dataset of `User Defined`. And you will be asked to set the explanation parameters and upload your own data as shown below.![image-20200820133633157](/Users/junyuan/Library/Application Support/typora-user-images/image-20200820133633157.png) 
+- Step 3: Open the [live demo](http://nyuvis-web.poly.edu/projects/isure/index.html) and choose the dataset of `User Defined`. And you will be asked to set the explanation parameters and upload your own data as shown below.![image](https://user-images.githubusercontent.com/9759891/110395090-89e76080-803b-11eb-92ff-ab44d4a454f4.png) 
 - Step 4: Upload your model by clicking the button of `Choose File`. 
 - Step 5: Click `Generate Rules`.
 - Step 6: Explore the rules in the user interface.
 
 ## Web application
 ### How to run the app locally with your own data
-
-#### 1. Generate necessary data for running the web application
-
-- Please put your own data in the folder [prepare/input](https://github.com/nyuvis/SuRE/tree/master/prepare/input)
-- Then make some changes in the notebok [generate_output_without_training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data_without_training.ipynb) or [generate_output+training.ipynb](https://github.com/nyuvis/SuRE/blob/master/prepare/generate_data%2Btraining.ipynb) to read your own data.
-- You will get a folder named `user_defined` in [prepare/output](https://github.com/nyuvis/SuRE/tree/master/prepare/output)
-- Move the `user_defined` folder to `webapp/data/`
-
-#### 2. Run the server
 
 - Open the terminal at the directory of  `webapp`
 - Install necessary python libraries:
@@ -58,5 +43,5 @@ Because the [demo](http://nyuvis-web.poly.edu/projects/isure/index.html) needs t
   - run the command line `python server/server.py`. Please notice that the code is for python 3. And in some system, you may need to run the command `python3 server/server.py`.
 - Visit the web application at `localhost:6060/index.html`.
 
-By default, the system show the data of a loan application dataset. If you want to test your own data, you can put the folder containing your data files under `data`, and rename your data folder as `default`. 
+By default, the system show the data of a diabetes dataset. 
 

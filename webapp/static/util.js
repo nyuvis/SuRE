@@ -1,14 +1,14 @@
 let filter_threshold = {
 	"support": 20,
-	"fidelity": .85,
-  "num_feat": 2,
-  "num_bin": 4,
+	"fidelity": .9,
+  "num_feat": 3,
+  "num_bin": 3,
 }
 
 let node2rule = [{}, {}, {}, {}];
 let rule2node = [{}, {}, {}, {}];
 let tab_rules = [[], [], [], []];
-let row_sorted = [false, false, false, false],
+let row_sorted = false,
   col_clicked = false;
 
 let new_node_shown = {};
@@ -101,6 +101,12 @@ function postData(url, data, cb) {
       body:JSON.stringify(data)
     }).then((data) => {
       if(data.status !== 200 || !data.ok) {
+        // remove the progressing
+        d3.select('#progress')
+            .style("display", "none");
+        // show error information
+        d3.select('#error_block')
+          .style("display", "block");
         throw new Error(`server returned ${data.status}${data.ok ? " ok" : ""}`);
       }
       const ct = data.headers.get("content-type");
@@ -113,6 +119,9 @@ function postData(url, data, cb) {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "DELETE, POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With"
       },
       body:JSON.stringify(data)
     }).then((res) => {

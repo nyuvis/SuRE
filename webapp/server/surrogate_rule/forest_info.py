@@ -6,7 +6,7 @@ from scipy.cluster.hierarchy import ward, leaves_list
 from scipy.spatial import distance
 
 class Forest():
-    def initialize(self, node_info, real_min, real_max, real_percentile, df, y_pred, y_gt, rules):
+    def initialize(self, node_info, real_min, real_max, real_percentile, df, y_pred, y_gt, rules, target_names):
         self.node_info = { int(x) : node_info[x] for x in node_info }
         # self.node_info = node_info
         self.real_min = real_min
@@ -28,8 +28,7 @@ class Forest():
         self.y_pred = np.array(y_pred)
         self.y_gt = np.array(y_gt)
         self.rules = rules
-        # cate_X initialization
-        # self.initialize_cate_X(self.df.values)
+        self.target_names = target_names
 
         self.real_percentile = real_percentile
         self.rep_range = np.zeros(shape=(len(real_min), real_percentile['num_bin'], 2))
@@ -40,21 +39,30 @@ class Forest():
                     real_percentile['percentile_table'][i+1][idx]])
             self.rep_range[idx][self.num_bin-1] = np.array([real_percentile['percentile_table'][self.num_bin-2][idx], real_max[idx]])
 
-        # generate node pre_order (root < left < right)
-        # self.preOrder = {}
-        # self.tot_idx = 0
-        # self.preOrderTraverse(0)
-        # return {"pre_order": self.preOrder}
+    def initialize_histogram(self):
+        dist_list = []
 
-    def initialize_cate_X(self, X):
-        self.real_3_1 = np.percentile(X, q=33, axis=0)
-        self.real_3_2 = np.percentile(X, q=67, axis=0)
-        cate_X = []
-        for col_idx in range(X.shape[1]):
-            cate_X.append([self.transform_func(col_idx, ele) for ele in X[:, col_idx]])
+        for attr_idx in range(self.df.columns.shape[0]):
+            hist = np.histogram(self.df.values[:, attr_idx], bins=10, range=(self.real_min[attr_idx], self.real_max[attr_idx]))
+            dist_list.append({
+                'hist': hist[0].tolist(),
+                'bin_edges': hist[1].tolist(),
+        })
+        return dist_list
 
-        cate_X = np.transpose(np.array(cate_X))
-        self.cate_X = cate_X
+    def initilized_rule_overlapping(self):
+        self.rule_overlapping = np.zeros(shape=(len(self.rules), self.num_bin * self.df.columns.shape[0] + 1))
+        rid = 0
+        for rule in self.rules:
+            conds = rule['rules']
+            # matched_data = pd.DataFrame(data=self.cate_X, columns=cols)
+            for cond in conds:
+                col = cond['feature']
+                t_idx = col * self.num_bin
+                for i in cond['range']:
+                    self.rule_overlapping[rid][t_idx+i] = 1
+            rid += 1
+        self.rule_overlapping[:, -1] = 1
 
     def initialize_rule_match_table(self):
         cols = self.df.columns
@@ -83,14 +91,6 @@ class Forest():
             rid += 1
         d = distance.pdist(X=self.rule_matched_table, metric='jaccard')
         self.rule_similarity = distance.squareform(d)
-
-    def transform_func(self, col_idx, ele):
-        if (ele < self.real_3_1[col_idx]):
-            return 0
-        elif (ele < self.real_3_2[col_idx]):
-            return 1
-        else:
-            return 2
 
     def empty_has_leaves(self):
         self.has_leaves = np.zeros(len(self.node_info))
@@ -289,6 +289,8 @@ class Forest():
         target_set = []
         D = {i: self.rule_matched_table[i].sum() for i in range(len(self.rules))}
         target_matched_vector = np.zeros(shape=self.df.shape[0])
+        target_overlapping = np.zeros(shape=self.df.columns.shape[0] * self.num_bin + 1)
+        target_overlapping[-1] = 1
 
         # find the most differet rule every time, 
         # until all instances are covered, or cannot cover new instances
@@ -297,28 +299,79 @@ class Forest():
         while (go_on):
             target_set.append(rid)
             target_matched_vector = np.logical_or(target_matched_vector, self.rule_matched_table[rid])
+            target_overlapping = np.logical_or(target_overlapping, self.rule_overlapping[rid])
             del D[rid]
             if (len(D) == 0):
                 go_on = False
             else:
                 # update distance to target set
+                # D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) / self.rule_matched_table[key].sum() for key in D}
+                # D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) / (np.logical_and(target_overlapping, self.rule_overlapping[key])).sum() for key in D}
                 D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) for key in D}
                 rid = max(D, key=D.get)
-                if (D[rid] == 0):
+                if (D[rid] <= 0):
                     go_on = False
 
         self.target_set = target_set
-        # get the row order
-        self.hierarchy_leaves = self.hierarchical_clustering(target_set)
+        # get the row order by hierarchical clustering
+        # self.hierarchy_leaves = self.hierarchical_clustering(target_set)
+        # self.rule_ord = self.hierarchy_leaves
+
+        # get thr row order by label
+        self.rule_ord = self.get_order_by_label(target_set)
+
         # get coverage
         coverage = float(target_matched_vector.sum()) / target_matched_vector.shape[0]
         target_rule_set = []
-        for rule_ord in self.hierarchy_leaves:
+        text_rules = []
+        for rule_ord in self.rule_ord:
+        # for rule_ord in range(len(target_set)):
             rid = target_set[rule_ord]
             r = self.rules[rid]
             r['rid'] = rid
+            # text_rules.append(self.get_rule_text(r))
             target_rule_set.append(r)
-        return {'rules': target_rule_set, "tot_rule": len(self.rules), "coverage": coverage}
+        self.target_rule_set = target_rule_set
+        return {'rules': target_rule_set, "tot_rule": len(self.rules), "coverage": coverage, "text_rules": text_rules}
+
+    def get_rule_text(self, r):
+        rule_str = "If "
+        attrs = self.df.columns.values
+
+        for i in range(len(r['rules'])):
+            cond = r['rules'][i]
+            if (i > 0):
+                rule_str += " AND "
+            rule_str += attrs[cond['feature']] 
+            if (cond['sign'] == 'range'):
+                rule_str += " from " + str(cond['threshold0']) + " to " + str(cond['threshold1'])
+            elif (cond['sign'] == '<='):
+                if cond['range'][-1] == self.num_bin - 1:
+                    rule_str += "<=" + str(cond['threshold'])
+                else:
+                    rule_str += "<" + str(cond['threshold'])
+            else:
+                rule_str += '>=' + str(cond['threshold'])
+        rule_str += ' Then ' + self.target_names[r['label']]
+        return rule_str
+
+    def get_order_by_label(self, target_set):
+        row_info = []
+        row_order = {}
+
+        for i in range(len(target_set)):
+            rid = target_set[i]
+            row_info.append({
+              'idx': i,
+              'label': self.rules[rid]['label'],
+              'support': self.node_info[self.rules[rid]['node_id']]['support']
+            })
+
+        row_info = sorted(row_info, key = lambda x: (x['label'], -x['support']))
+        for i in range(len(row_info)):
+            row_order[row_info[i]['idx']] = i
+
+        return row_order
 
     def hierarchical_clustering(self, target_set):
         # construct vectors of rules for clusters
@@ -381,6 +434,7 @@ class Forest():
                 # matrix[i_i][i_j] = link['common']
         return {'nodes': spc_info, 'links': link_info}
 
+
     def get_compare_data(self, rid):
         # get the most similar rules
         r_info = []
@@ -409,7 +463,7 @@ class Forest():
         same_set_stat = []
         # for r_id in self.target_set:
         #     
-        for rule_ord in self.hierarchy_leaves:
+        for rule_ord in self.rule_ord:
             r_id = self.target_set[rule_ord]
             union = np.logical_or(self.rule_matched_table[rid], self.rule_matched_table[r_id]).sum()
             inter = np.logical_and(self.rule_matched_table[rid], self.rule_matched_table[r_id]).sum()
@@ -433,6 +487,237 @@ class Forest():
                 'rule_unique': int(self.rule_matched_table[r_id].sum() - inter),
             })
         return {'top_simi': top_simi, 'same_set_stat': same_set_stat, 'similar_set_stat': similar_set_stat}
+
+    def get_col_order_by_freq(self, rules):
+        col_info = []
+        col_order = []
+        for i in range(len(self.df.columns)):
+            col_info.append({
+              'idx': i,
+              'freq': 0
+            })
+            col_order.append(i)
+
+
+        for the_rule in rules:
+            r = the_rule['rules']
+            for cond in r:
+                col_info[cond['feature']]['freq'] += 1
+
+        # sort columns by freq.
+        col_info.sort(key=lambda x: x['freq'], reverse=True)
+        for i in range(len(col_info)):
+            col_order[col_info[i]['idx']] = i
+
+        return col_order
+
+    def get_lattice_structure(self, rules):
+        self.lattice_node_max = 0
+        self.lattice_leaves = []
+        root = 0;
+        self.lattice = {0: {'node_id': 0, 'feature': -1, 'threshold': -1, 'sign': -1,
+        'parent': -1, 'children_id': [], 'depth': 0}}
+        # get column order
+        col_order = self.get_col_order_by_freq(rules)
+
+        for the_rule in rules:
+            # order conditions
+            r = the_rule['rules']
+            # r.sort(key=lambda x: col_order[x['feature']])
+            # add rule to index tree
+            lattice_node, cond_idx = self.find_common_ancestor_lattice(r)
+            # update lattice hierarchy
+            self.update_subtree_node_lattice(lattice_node, r, cond_idx)
+
+        # initialize prediction/ground_truth contribution
+        self.conf_cont = np.zeros(shape=(2,2,self.df.shape[0]))
+        self.conf_cont[0,0,:] = self.initialize_bb_gt_contribution(0, 0)
+        self.conf_cont[0,1,:] = self.initialize_bb_gt_contribution(0, 1)
+        self.conf_cont[1,0,:] = self.initialize_bb_gt_contribution(1, 0)
+        self.conf_cont[1,1,:] = self.initialize_bb_gt_contribution(1, 1)
+
+        # calculate support and confusion matrix 
+        self.update_lattice_stat(0, np.ones(self.df.shape[0]))
+        return self.lattice
+
+    def find_common_ancestor_lattice(self, rule):
+        candidate= 0
+        cond_idx = 0
+        move_on = True
+        while (move_on and cond_idx<len(rule)):
+            move_on = False
+            children = self.lattice[candidate]['children_id']
+            for child_idx in range(len(children)):
+                if (self.condition_equals(self.lattice[children[child_idx]], rule[cond_idx])):
+                    move_on = True
+                    candidate = children[child_idx]
+                    cond_idx += 1
+                    break
+        return candidate, cond_idx
+
+
+    def condition_equals(self, a, b):
+        if (a['feature'] == b['feature'] and a['sign'] == b['sign']):
+            if (a['sign'] == 'range'):
+                return a['threshold0'] == b['threshold0'] and a['threshold1']==b['threshold1']
+            else:
+                return a['threshold'] == b['threshold']
+        return False
+
+    def update_subtree_node_lattice(self, common_ancestor, rule, cond_idx):
+        # update common ancestor
+        self.lattice[common_ancestor]['children_id'].append(self.lattice_node_max+1)
+        
+        # update child nodes
+        parent_id = common_ancestor
+        for idx in range(cond_idx, len(rule)):
+            self.lattice_node_max += 1
+            new_node = {
+                'node_id': self.lattice_node_max,
+                'children_id': [],
+                'parent': parent_id,
+                'feature': int(rule[idx]['feature']),
+                'sign': rule[idx]['sign'],
+                'depth': int(idx),
+            }
+            if (new_node['sign']=='range'):
+                new_node['threshold0'] = float(rule[idx]['threshold0'])
+                new_node['threshold1'] = float(rule[idx]['threshold1'])
+            else:
+                new_node['threshold'] = float(rule[idx]['threshold'])
+
+            if (idx<len(rule)-1):
+                new_node['children_id'].append(self.lattice_node_max+1)
+            self.lattice[new_node['node_id']] = new_node
+            parent_id = self.lattice_node_max
+        self.lattice_leaves.append(self.lattice_node_max)
+
+    def update_lattice_stat(self, node_id, match_vector):
+        # update lattice node info
+        self.lattice[node_id]['support'] = np.sum(match_vector)
+        conf_matrix = np.zeros(shape=(2,2))
+        conf_matrix[0][0] = np.sum(np.logical_and(self.conf_cont[0][0], match_vector))
+        conf_matrix[0][1] = np.sum(np.logical_and(self.conf_cont[0][1], match_vector))
+        conf_matrix[1][0] = np.sum(np.logical_and(self.conf_cont[1][0], match_vector))
+        conf_matrix[1][1] = np.sum(np.logical_and(self.conf_cont[1][1], match_vector))
+        self.lattice[node_id]['conf_mat'] = conf_matrix.tolist()
+        
+        # initialize data to be matched
+        idx = [i for i, x in enumerate(match_vector) if x>0]
+        self.lattice[node_id]['matched_data'] = idx
+
+        if (len(self.lattice[node_id]['children_id'])==0):
+            return
+
+        to_match = self.df.iloc[idx]
+        cols = self.df.columns
+        
+        for child in self.lattice[node_id]['children_id']:
+             # compare values with condition
+            cond = self.lattice[child]
+            col = cols[cond['feature']]
+            if (cond['sign'] == '<='):  
+                if (cond['threshold'] == self.real_max[cond['feature']] and 
+                    cond['threshold']!=self.rep_range[cond['feature']][-1][1]):
+                    matched_data = to_match[to_match[col] <= cond['threshold']]
+                else:
+                    matched_data = to_match[to_match[col] < cond['threshold']]
+            elif (cond['sign'] == '>'):
+                matched_data = to_match[to_match[col] >= cond['threshold']]
+            elif (cond['sign'] == 'range'):
+                matched_data = to_match[(to_match[col] >= cond['threshold0']) & (to_match[col] < cond['threshold1'])]
+            else:
+                print("!!!!!! Error rule !!!!!!")
+            # update match stat
+            matched_index = matched_data.index.values.astype(int)
+            new_match_vector = np.zeros(self.df.shape[0])
+            new_match_vector[matched_index] = 1
+            self.update_lattice_stat(child, new_match_vector)
+
+    def initialize_bb_gt_contribution(self, black_box, ground_truth):
+        idx = [i for i in range(len(self.y_gt)) if self.y_pred[i]==black_box and self.y_gt[i]==ground_truth]
+        cont_vector = np.zeros(self.df.shape[0])
+        cont_vector[idx] = 1
+        return cont_vector
+       
+    def filter_rules(self, filters):
+        print(filters)
+        feat_filter = filters['feat_filter']
+        pred_filter = int(filters['pred_filter'])
+
+        if (len(feat_filter.keys()) == 0 and pred_filter<0):
+            return self.target_rule_set 
+
+        to_present = []
+        for the_rule in self.target_rule_set:
+            rule = the_rule['rules']
+            to_add = False
+            if (the_rule['label'] == pred_filter or pred_filter == -1):
+                if (len(feat_filter.keys()) == 0):
+                    to_add = True
+                else:
+                    for cond in rule:
+                        if (str(cond['feature']) not in feat_filter.keys()):
+                            continue
+                        if (int(feat_filter[str(cond['feature'])]) != -1 and (int(feat_filter[str(cond['feature'])]) not in cond['range'])):
+                            continue
+                        to_add = True
+                        break
+            if (to_add):
+                to_present.append(the_rule)
+        return to_present
+
+    def find_rules_for_subgroups(self, data_filters):
+        print(data_filters)
+        if (len(data_filters.keys()) == 0):
+            return self.target_rule_set 
+
+        cols = self.df.columns
+        subgroup = np.zeros(self.df.shape[0])
+        to_present = []
+
+        # initialize mathced vector
+        matched_data = pd.DataFrame(self.df)
+        for feat in data_filters.keys():
+            val = int(data_filters[feat])
+            feat_idx = int(feat)
+            col = cols[feat_idx]
+            if (val < 0): 
+                continue
+
+            if (val == 0):
+                th0 = self.real_min[feat_idx]
+                th1 = self.real_percentile['percentile_table'][0][feat_idx]
+            elif (val == self.num_bin-1):
+                th0 = self.real_percentile['percentile_table'][self.num_bin-2][feat_idx]
+                th1 = self.real_max[feat_idx]
+            else:
+                th0 = self.real_percentile['percentile_table'][val-1][feat_idx]
+                th1 = self.real_percentile['percentile_table'][val][feat_idx]
+
+            matched_data = matched_data[(matched_data[col] >= th0) & (matched_data[col] < th1)]
+            matched_index = matched_data.index.values.astype(int)
+            subgroup[matched_index] = 1
+
+        # find descriptive rules
+        # for rule_idx in range(len(self.rule_ord)):
+        #     if (np.logical_and(subgroup, self.rule_matched_table[self.rule_ord[rule_idx]]).sum() > 0):
+        #         rid = target_set[rule_ord]
+        #     r = self.rules[rid]
+        #         to_present.append(self.rules[rule_idx])
+
+        for rule_ord in self.rule_ord:
+            rid = self.target_set[rule_ord]
+            r = self.rules[rid]
+            if (np.logical_and(subgroup, self.rule_matched_table[rid]).sum() > 0):
+                to_present.append(self.rules[rid])
+
+        return to_present
+
+
+
+
+
 
 
 
