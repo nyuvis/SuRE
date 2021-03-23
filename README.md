@@ -2,7 +2,7 @@
 
 SuRE is an interactive user interface for visual exploration of surrogate rules that describe a black-box model’s behaviors on different groups of instances.
 
-If-then rules are widely used as a way to communicate the logic of a Machine Learning (ML) model when transparency and interpretability are required. For example, the rule *"If Glucose < 108 and Age < 33, then low risk of diabetes"* describes the model's behavior: for people with Glucose < 136 and Age < 33, the model consistently suggests a low risk of diabetes.
+If-then rules are widely used as a way to communicate the logic of a Machine Learning (ML) model when transparency and interpretability are required. For example, the rule *"If Glucose < 108 and Age < 33, then low risk of diabetes"* describes the model's behavior: for people with Glucose < 108 and Age < 33, the model consistently suggests a low risk of diabetes.
 
 However, the traditional visual representation of a set of rules does not support an inspection of individual conditions, that is, how an individual condition influences the model behavior. Based on this, we propose a lattice-like visualization for rule logic.
 
