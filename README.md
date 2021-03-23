@@ -1,8 +1,20 @@
-# SuRE: An Surrogate Rule Exploration Method
+# SuRE: A Surrogate Rule Exploration Method
 
 SuRE is an interactive user interface for visual exploration of surrogate rules that describe a black-box model’s behaviors on different groups of instances.
 
-You can also play with the [demo](http://nyuvis-web.poly.edu/projects/isure) using pre-defined data.
+If-then rules are widely used as a way to communicate the logic of a Machine Learning (ML) model when transparency and interpretability are required. For example, the rule *"If Glucose < 108 and Age < 33, then low risk of diabetes"* describes the model's behavior: for people with Glucose < 136 and Age < 33, the model consistently suggests a low risk of diabetes.
+
+However, the traditional visual representation of a set of rules does not support an inspection of individual conditions, that is, how an individual condition influences the model behavior. Based on this, we propose a lattice-like visualization for rule logic.
+
+For example, a set of rules that describes how a model suggests risks of diabetes can be visualized like below:
+
+![image](https://user-images.githubusercontent.com/77811546/112119975-3aa14400-8b94-11eb-9c97-e671930f953a.png)
+
+## Table of Content
+
+- [Repository Structure](repository-structure)
+- [Generate explanations for your own data with live demo](#generate-explanations-for-your-own-data-live-demo)
+- [Run the web app locally](#web-application)
 
 ## Repository Structure
 
