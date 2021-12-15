@@ -1,8 +1,7 @@
-let filter_threshold = {
-	"support": 20,
-	"fidelity": .9,
-  "num_feat": 3,
-  "num_bin": 3,
+let filter_threshold = default_threshold;
+let explore_stat = {
+  "regeneration": 0,
+  "view_click": [1,0,0,0],
 }
 
 let node2rule = [{}, {}, {}, {}];
@@ -190,7 +189,7 @@ function generate_row_order_by_confmat(listData, conf_idx) {
     row_info.push({
       'idx': i,
       'node_id': d['node_id'],
-      'conf_val': node_info[d['node_id']]['conf_mat'][Math.floor(conf_idx/2)][conf_idx%2],
+      'conf_val': lattice[r2lattice[i][d['rules'].length-1]]['conf_mat'][Math.floor(conf_idx/2)][1-conf_idx%2],
     })
   })
 

@@ -1,4 +1,4 @@
-.rule-view div {
+ .rule-view div {
   display: flex; 
 }
 
@@ -89,7 +89,7 @@ rect {
 }
 
 .stat {
-  max-height: 280px; max-width: 300px; overflow-y: scroll;
+  max-height: 280px; max-width: 300px; overflow-y: auto;
   direction: rtl;
 }
 
@@ -108,7 +108,7 @@ rect {
 }
 
 .title span{
-  margin-left: 5px;
+  /*margin-left: 5px;*/
   margin-right: 5px;
   margin-top: 2px;
 }
@@ -334,7 +334,7 @@ rect {
 #data-table {
   max-height: 280px; 
   max-width: 900px; 
-  overflow: scroll;
+  overflow: auto;
 }
 
 #data-table table {
@@ -346,7 +346,7 @@ rect {
 #data-pred {
   max-height: 120px; 
   max-width: 100px;
-  overflow: scroll;
+  overflow: auto;
 }
 
 table td {
@@ -393,8 +393,8 @@ table td {
 }
 
 .lattice_link {
-  stroke-width: 0.8;
-  stroke-opacity: 0.2;
+  stroke-width: .8;
+  stroke-opacity: .3;
 }
 
 .lattice_selected {
@@ -408,7 +408,23 @@ table td {
 }
 
 .lattice_node > text {
-  visibility: hidden;
+  /*visibility: hidden;*/
+  font-size: 10px;
+}
+
+.list_link {
+  stroke-width: .8;
+  stroke-opacity: .7;
+}
+
+.list_link_selected {
+  stroke-width: 1.5;
+  stroke-opacity: 0.9;
+}
+
+.list_link_highlight {
+  stroke-width: 1.5;
+  stroke-opacity: 0.9;
 }
 
 .lattice_node_hovered > text{
@@ -424,7 +440,19 @@ table td {
 .lattice_node_greyout > .node_mask{
   fill: white;
   stroke: none;
-  fill-opacity: 0.5;
+  fill-opacity: 0.7;
+}
+
+.rule_node_hovered > .node_mask{
+  fill: white;
+  stroke: none;
+  fill-opacity: 0;
+}
+
+.rule_node_greyout > .node_mask{
+  fill: white;
+  stroke: none;
+  fill-opacity: 0.7;
 }
 
 .lattice_node_greyout > text {
@@ -437,6 +465,13 @@ table td {
 }
 
 .lattice_node_selected > .node_mask{
+  fill: white;
+  stroke: none;
+  fill-opacity: 0;
+  stroke-width: 1px;
+}
+
+.rule_node_selected > .node_mask{
   fill: white;
   stroke: black;
   fill-opacity: 0;
@@ -479,9 +514,9 @@ table td {
 }
 
 .text-hint {
-  margin-top: 60px;
+  margin-top: 10px;
   margin-left: 20px;
-  border-left: 1px solid lightgrey;
+  /*border-left: 1px solid lightgrey;*/
   padding: 10px;
   max-height: 350px;
 }
@@ -489,6 +524,19 @@ table td {
 .text-hint p {
   margin: 0px;
   font-size: 15px;
+}
+
+.text-hint svg {
+  width: 348px;
+}
+
+.info-div {
+  border: grey 1px solid;
+}
+
+.info-div .tab-title{
+ font: 400 13.3333px Arial;
+ padding: 5px 10px;
 }
 
 .tooltip {
@@ -518,4 +566,56 @@ table td {
 
 .rule_item text{
   font: 14px sans-serif;
+}
+
+#saved_summary {
+  width: 350px;
+}
+
+.rlink path{
+  fill: none;
+  stroke: grey;
+}
+
+.false_class path {
+  stroke:black; 
+  stroke-width:1;
+}
+
+.saved_node_hidden {
+  visibility: hidden;
+}
+
+.saved_node circle {
+  fill: lightgrey;
+  stroke: black;
+  stroke-width: .5;
+}
+
+.saved_node text {
+  font: 10px sans-serif;
+  text-anchor: middle;
+  alignment-baseline: middle;
+}
+
+.saved_node_highlight {
+  visibility: visible;
+}
+
+.rule_mask_overlap {
+  fill-opacity: 0;
+  stroke: none;
+}
+
+div.node_tooltip { 
+    position: absolute;     
+    text-align: center;     
+    width: 220px;          
+    height: 30px;         
+    padding: 2px;       
+    font: 11px sans-serif;    
+    background: lightgrey; 
+    border: 0px;    
+    border-radius: 8px;     
+    pointer-events: none;     
 }

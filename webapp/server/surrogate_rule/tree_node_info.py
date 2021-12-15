@@ -8,7 +8,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils import resample
 
 class tree_node_info:
-    def initialize(self, X, y, y_pred, attrs, filter_threshold, num_bin, debug_class, dataname=None, verbose=False):
+    def initialize(self, X, y, y_pred, attrs, filter_threshold, num_bin, debug_class, n_cls=2,
+            dataname=None, verbose=False):
         self.verbose = verbose
         self.X = X
         self.cate_X = self.get_cate_X(X, num_bin)
@@ -20,6 +21,7 @@ class tree_node_info:
         self.filter_threshold = filter_threshold
         self.num_bin = num_bin
         self.debug_class = debug_class
+        self.n_cls = n_cls
         self.dataname = dataname
         return self
 
@@ -49,16 +51,13 @@ class tree_node_info:
 
     def prepare_for_debug_training(self):
         self.label = np.zeros(shape=self.y.shape)
-        for pred in range(2):
-            for gt in range(2):
+        for pred in range(self.n_cls):
+            for gt in range(self.n_cls):
                 res =  (self.y == gt) & (self.y_pred == pred)
                 idx = [i for i, val in enumerate(res) if val]
-                self.label[idx] = pred * 2 + gt
+                self.label[idx] = pred * n_cls + gt
  
     def train_surrogate_random_forest(self):
-        # if (self.dataname == 'loan'):
-        #     self.rfc=RandomForestClassifier(random_state=1234, n_estimators=30, )
-        # else:
         self.rfc=RandomForestClassifier(random_state=1234, n_estimators=100, )
 
         if (self.debug_class >= 0):
@@ -104,9 +103,9 @@ class tree_node_info:
         self.value = estimator.tree_.value
         # value: number of training samples that has the label of class_id falling into this node
         if (self.debug_class < 0):
-            self.value = self.value.reshape(len(self.value),2)
+            self.value = self.value.reshape(len(self.value),self.n_cls)
         else:
-            self.value = self.value.reshape(len(self.value),4)
+            self.value = self.value.reshape(len(self.value),self.n_cls*2)
 
         self.initialize_node_info()
         self.initialize_node_info_with_stat(estimator)
@@ -181,11 +180,10 @@ class tree_node_info:
     def initialize_node_info_with_stat(self, estimator):
         self.tot_size = self.cate_X.shape[0]
         self.node_matched = np.zeros(shape=self.n_nodes)
-        self.node_gt = np.zeros(shape=(self.n_nodes, 2))
-        self.node_bb = np.zeros(shape=(self.n_nodes, 2))
+        self.node_gt = np.zeros(shape=(self.n_nodes, self.n_cls))
+        self.node_bb = np.zeros(shape=(self.n_nodes, self.n_cls))
         self.node_pred = np.zeros(shape=self.n_nodes).astype(int)
-        self.node_bb_gt = np.zeros(shape=(self.n_nodes, 2))
-        self.node_conf = np.zeros(shape=(self.n_nodes, 2, 2))
+        self.node_bb_gt = np.zeros(shape=(self.n_nodes, self.n_cls))
 
         ''' 
          Apply testing data to leave node 
@@ -209,13 +207,12 @@ class tree_node_info:
             self.node_bb[node_id][self.y_pred[idx]] += 1
             self.node_gt[node_id][self.y[idx]] += 1
             self.node_bb_gt[node_id][self.y_pred[idx]] += (self.y_pred[idx]==self.y[idx])
-            self.node_conf[node_id][self.y_pred[idx]][self.y[idx]] += 1 
             self.node_pred[node_id] = np.argmax(self.value[node_id])
             if (self.debug_class >= 0):
-                self.node_pred[node_id] = self.node_pred[node_id] // 2
+                self.node_pred[node_id] = self.node_pred[node_id] // self.n_cls
 
         ''' initialize the marks on the root'''
-        self.node_feat_mark[0][self.feature[0]] = 1
+        self.node_feat_mark[0][self.feature[0]] = 0
 
         self.go_through_a_tree(0)    
         self.node_feat_mark[0][self.feature[0]] = 0
@@ -238,16 +235,14 @@ class tree_node_info:
         self.go_through_a_tree(right_child)
         ''' processing '''
         self.node_matched[node_id] = self.node_matched[left_child] + self.node_matched[right_child]
-        for class_id in range(2):
+        for class_id in range(self.n_cls):
             self.node_bb[node_id][class_id] = self.node_bb[left_child][class_id] + self.node_bb[right_child][class_id]
             self.node_gt[node_id][class_id] = self.node_gt[left_child][class_id] + self.node_gt[right_child][class_id]
             self.node_bb_gt[node_id][class_id] = self.node_bb_gt[left_child][class_id] + self.node_bb_gt[right_child][class_id]
-            for gt_id in range(2):
-                self.node_conf[node_id][class_id][gt_id] = self.node_conf[left_child][class_id][gt_id] + self.node_conf[right_child][class_id][gt_id]
-    
+            
         self.node_pred[node_id] = np.argmax(self.value[node_id])
         if (self.debug_class >= 0):
-            self.node_pred[node_id] = self.node_pred[node_id] // 2
+            self.node_pred[node_id] = self.node_pred[node_id] // self.n_cls
         ''' redefine node_feat_mark '''
         if (node_id > 0):
             self.node_feat_mark[node_id] = self.node_feat_mark[self.parent[node_id]]
@@ -256,7 +251,6 @@ class tree_node_info:
     def derive_tree_data(self, node_id, parent_id, sign, dep):
         ''' filter the nodes '''
         if (self.node_matched[node_id] < self.filter_threshold['support']  
-            # or self.node_bb[node_id][self.node_pred[node_id]] / self.node_matched[node_id] < self.filter_threshold['fidelity']
             or self.node_feat_mark[node_id].sum() > self.filter_threshold['num_feat']):
             return []
 
@@ -267,23 +261,18 @@ class tree_node_info:
         node_info['support'] = self.node_matched[node_id] / self.tot_size
         node_info['depth'] = self.node_depth[node_id]
         node_info['num_feat'] = self.node_feat_mark[node_id].sum()
-        node_info["conf_mat"] = (self.node_conf[node_id]/self.node_matched[node_id]).tolist()
         node_info["accuracy"] = 0
 
         if (self.node_matched[node_id] > 0):
-            if (self.debug_class < 0):
-                node_info['fidelity'] = float(self.node_bb[node_id][self.node_pred[node_id]] / self.node_matched[node_id])
-            else:
-                pred = np.argmax(self.value[node_id])
-                node_info['fidelity'] = float(self.node_conf[node_id][pred//2][pred%2] / self.node_matched[node_id])
-               
+            node_info['fidelity'] = float(self.node_bb[node_id][self.node_pred[node_id]] / self.node_matched[node_id])
+            
         if (self.node_bb[node_id][self.node_pred[node_id]] > 0):
             node_info['accuracy'] = float(self.node_bb_gt[node_id][self.node_pred[node_id]] / self.node_bb[node_id][self.node_pred[node_id]])
         self.node_info_dict[node_id] = node_info
 
-        if (node_info['fidelity'] >= self.filter_threshold['fidelity']):
+        if (node_info['fidelity'] >= self.filter_threshold['fidelity'] and node_info['num_feat']>=1):
             self.leaves.append(node_id)
-            return
+            return self
 
         res1 = []
         res2 = []
@@ -291,8 +280,7 @@ class tree_node_info:
             res1 = self.derive_tree_data(self.children_right[node_id], node_id, ">", dep+1)
         if (self.children_left[node_id] >= 0):
             res2 = self.derive_tree_data(self.children_left[node_id], node_id, "<=", dep+1)
-        # if ((res1 == [] or res2 == []) and node_info['fidelity'] >= self.filter_threshold['fidelity'] and self.node_info_dict[self.parent[node_id]]['fidelity']<self.filter_threshold['fidelity']):
-        #     self.leaves.append(node_id)
+
         return self
 
 class forest():
@@ -330,7 +318,6 @@ class forest():
             'num_feat': 0,
             'fidelity': 0,
             'accuracy': 0, 
-            'conf_mat': self.trees[0][0]['conf_mat'],
         }
         for tree_idx in range(len(self.trees)):
             for leaf_idx in self.trees[tree_idx]['leaves']:
@@ -404,7 +391,6 @@ class forest():
                 'num_feat': int(self.trees[tree_idx][old_id]['num_feat']),
                 'fidelity': float(self.trees[tree_idx][old_id]['fidelity']),
                 'accuracy': float(self.trees[tree_idx][old_id]['accuracy']), 
-                'conf_mat': list(self.trees[tree_idx][old_id]['conf_mat']),
             }
             if (idx<len(path)-1):
                 new_node['children_id'].append(self.max_id+1)
@@ -482,13 +468,16 @@ class forest():
             feature_range = np.zeros(shape=(len(self.attrs), 2), dtype=np.float128)
             feature_range[:, 0] = 0
             feature_range[:, 1] = num_bin - 1
+            
+            p_id = self.tree_node_dict[node_id]['parent']
+            latest_app = np.zeros(shape=len(self.attrs))
 
-            while node_id >= 0:
-                p_id = self.tree_node_dict[node_id]['parent']
+            while p_id > 0:
                 sign = self.tree_node_dict[node_id]['sign']
                 if (p_id >= 0):
                     f_idx = self.tree_node_dict[p_id]['feature']
                     thrshd = self.tree_node_dict[p_id]['threshold']
+                    latest_app[f_idx] = p_id
                     if (sign == '<='):
                         # (min, thrshd)
                         if (feature_range[f_idx][1] > thrshd):
@@ -498,11 +487,14 @@ class forest():
                         if (feature_range[f_idx][0] < thrshd):
                             feature_range[f_idx][0] = thrshd
                 node_id = p_id
+                p_id = self.tree_node_dict[node_id]['parent']
+
             rules = []
             for j in range(len(feature_range)):
                 # summarize the condition
                 if (feature_range[j][0]!=0 or feature_range[j][1]!=num_bin-1):                    
                     new_cond = self.translate_rule(feature_range[j], j)
+                    new_cond['pid'] = latest_app[j]
                     rules.append(new_cond)
     
             pred_label = np.argmax(self.tree_node_dict[self.leaves[i]]['value'])

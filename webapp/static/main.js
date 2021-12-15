@@ -1,5 +1,5 @@
 let margin = {top: 0, right: 45, bottom: 5, left: 0},
-    feat_name_height = 60,
+    feat_name_height = 80,
     col_hist_height = 20,
     column_height = feat_name_height + col_hist_height,
     width = 860 - margin.right - margin.left,
@@ -18,10 +18,11 @@ let rectMarginTop = 5, rectMarginBottom = 5,
 let glyphCellWidth = 4, glyphCellHeight = 10;
 let rectHeight, rectWidth;
 let supportRectWidth = 65, fidelityChartWidth = 50, rule_radius = 7;
-let statWidth = supportRectWidth * 2 + fidelityChartWidth * 2+ rule_radius * 2 + 20;
+let statWidth = supportRectWidth * 2 + fidelityChartWidth + rule_radius * 2 + 20;
 let compWidth = supportRectWidth;
 
 let tot_train;
+let apply_lattice_scale = true, intrusion = false;
 
 let rule_svg = d3.select("#rule_svg");
 
@@ -66,9 +67,7 @@ let rules_to_keep = [];
 let selected_rule = -1;
 
 let histogram = [];
-let lattice = [];
-
-let param_set = false;
+let lattice = [], preIndex = {};
 
 let i = 0,
     duration = 750,
@@ -85,6 +84,7 @@ let i = 0,
     node_info,
     max_depth,
     target_names,
+    y_pred,
     text_rules,
     graph_nodes, graph_links, graph_link_dict; 
 
@@ -97,20 +97,25 @@ let pre_order = {};
 let rule_similarity = [];
 let rid2rix = {};
 
-function loadData() {
-    let path = domain + "data/" + folder;
+function loadData(intrusion=false, initial=false) {
+    let path = folder, default_not_set = true;
+    if (intrusion) {
+        path = "intrusion_task/" + folder;
+    }
+
+    if (folder.includes("wine") || folder == 'chemistry_pretrained' || folder == 'chemistry_pretrained_test') {
+        default_not_set = false;
+    }
 
     let to_post = {
         "filter_threshold": filter_threshold,
-        "dataname": folder,
+        "dataname": path,
         "debug_class": goal_debug,
+        "initial": initial && default_not_set,
     }
     if (folder == "user_defined") {
         existing_files = retrieveSave();
         to_post["file_key"] = existing_files[existing_files.length-1];
-    }
-    saved_rules = {
-        'max_idx': -1,
     }
 
     clear();
@@ -132,7 +137,6 @@ function loadData() {
         real_percentile = info["real_percentile"];
 
         node_info = info['node_info_arr'];
-        tot_train = node_info[0]['value'][0] + node_info[0]['value'][1];
         // graph_nodes = info['nodes'];
         // graph_links = info['links'];
         // graph_link_dict = {};
@@ -142,9 +146,16 @@ function loadData() {
         // graph_links.forEach(link => {
         //     graph_link_dict[link['source']].push(link['target']);
         // })
-        lattice = info['lattice']
+        lattice = info['lattice'];
+        tot_train = lattice[0]['support'];
+        preIndex = info['lattice_preIndex'];
         histogram = info['histogram'];
         let test_content = info['test_content'];
+
+        if (initial && default_not_set) {
+            filter_threshold['support'] = +info['min_support'];
+            document.getElementById('support_val').value = filter_threshold['support'];
+        }
 
         if (test_content !== undefined) {
             attrs = test_content["columns"];
@@ -155,6 +166,7 @@ function loadData() {
             // listData = file2["rule_lists"];
             target_names = test_content["target_names"];
             tot_data = test_content['data'].length;
+            y_pred = test_content['y_pred'];
         } 
 
         selected_filter = {}
@@ -163,16 +175,25 @@ function loadData() {
 }
 
 function clear() {
+    // clear selected rule 
     d3.select('#rule_description_selected').html("");
     d3.select('#selected_desp').html("");
     d3.select('#selected_stat g').remove();
+    d3.select('.selected_div')
+        .style('display', "none");
+    lattice_node_selected = -1;
+
+    // clear saved summary
+    d3.selectAll('#class_summary > g')
+        .remove();
+    d3.selectAll('#overlap_summary > g')
+        .remove();
+    saved_rules = {};
+    saved_rules_idx2id = [];
 }
 
 function render() {
     present_rules = listData;
-    // summary_nodes = filter_nodes(node_info);
-    
-    // render_matrix(rule_similarity);
 
     // adjust width and height
     if (RULE_MODE === MEDIAN_VAL_VIS) {
@@ -194,12 +215,12 @@ function render() {
     yScale = d3.scaleBand().domain(d3.range(listData.length+1))
         .range([0.5, height-margin.bottom]);
     summary_size_ = d3.scaleLinear()
-        .domain([filter_threshold['support'] , tot_train])
+        .domain([filter_threshold['support'] , tot_train*.9])
         .range([5, 35]);
 
+    render_legend_label("#legend1");
+    // TODO: adjust height for different views
     scroll_functions(width, height, "");
-    scroll_functions(width, height, 4);
-    scroll_data(width, height);
 
     // scale for render the support bar
     fidelityScale = d3.scaleLinear().domain([0, 1])
@@ -240,9 +261,6 @@ function render() {
             break;
     }
 
-    render_legend_label("#legend1");
-    // render_summary(summary_nodes, max_depth);
-
     present_rules = listData;
     col_order = column_order_by_feat_freq(listData);
 
@@ -254,17 +272,23 @@ function render() {
     listData.forEach((d, idx) => {
         rid2rix[d['rid']] = idx;
     }) 
+    d3.select("#rule-num")
+        .text(`${listData.length} (data coverage: ${(mrs_coverage*100).toFixed(2)}%)`);
+
+    d3.select('#filter_num_rule').html(listData.length);
+    d3.select('#filter_cover').html(`${(mrs_coverage*100).toFixed(2)}%`);
+  
 
     construct_lattice();
+    render_lattice();
+    render_saved_summary();
 
     update_rule_rendering(rule_svg, col_svg, stat_svg, "", listData, col_order);
-    d3.select("#rule-num")
-        .text(`${listData.length}/ ${tot_rule} (data coverage: ${(mrs_coverage*100).toFixed(2)}%)`);
-  
+    
     initialize_filters();
 
-    render_lattice();
     render_list();
+    render_hierarchical_list();
 }
 
 function initialize_filters() {
@@ -282,17 +306,40 @@ function initialize_filters() {
     filter_feat.append('option')
         .attr('value', -1)
         .attr('class', 'feat4filter_default')
-        .text('-- choose a feature name --')
+        .attr('disabled', 'true')
+        .text('-- choose a feature or prediction --')
 
     let ord_map = {}
     col_order.forEach((d, i) => ord_map[d] = i);
+
+    let attrs4filter = [];
+    attrs.forEach((d,i) => {
+        if (feat_max_num[i]<=0) return;
+        attrs4filter.push({
+            'value': ord_map[i],
+            'name': attrs[ord_map[i]],
+        });
+    });
+
     filter_feat.selectAll('.feat4filter')
-        .data(d3.range(attrs.length))
+        .data(attrs4filter)
         .enter()
         .append('option')
         .attr('class', 'feat4filter')
-        .attr('value', ix => ord_map[ix])
-        .text(ix=>attrs[ord_map[ix]]);
+        .attr('value', d => d.value)
+        .text(d=>d.name);
+
+    filter_feat.append('option')
+        .attr('disabled', 'true')
+        .attr('class', 'feat4filter')
+        .text('------prediction------')
+
+    filter_feat.selectAll('pred_filter')
+        .data(target_names).enter()
+        .append('option')
+        .attr('class', 'feat4filter pred_filter')
+        .attr('value', (d, i) => `pred-${i}`)
+        .text(d=>d)
 
     d3.select('#filter_feat').on('change', function() {
         let val = d3.select(this).property('value'),
@@ -301,29 +348,37 @@ function initialize_filters() {
         d3.selectAll('.featval4filter').remove();
 
         let val_options = d3.select('#filter_val')
-            .attr('value', -1)
+            .attr('value', -1);
+
+        let neg_options = d3.select('#filter_neg')
+            .attr("value", 0)
 
         if (selected_feat < 0) {
             return
         }
 
-        val_options.selectAll('.featval4filter')
-            .data(d3.range(filter_threshold['num_bin']))
-            .enter()
-            .append('option')
-            .attr('class', 'featval4filter')
-            .attr('value', (d,i)=>i)
-            .text((d, i) => {
-                if (i == 0) {
-                    return `[${real_min[selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
-                } else if (i == filter_threshold['num_bin']-1) {
-                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_max[selected_feat]}]`
-                } else {
-                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
-                }
-            })
+        if (val.split('-').length == 2) {
+            let pid = val.split('-')[1];
+            set_prediction_filter(pid);
+        } else {
+            val_options.selectAll('.featval4filter')
+                .data(d3.range(filter_threshold['num_bin']))
+                .enter()
+                .append('option')
+                .attr('class', 'featval4filter')
+                .attr('value', (d,i)=>i)
+                .text((d, i) => {
+                    if (i == 0) {
+                        return `[${real_min[selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
+                    } else if (i == filter_threshold['num_bin']-1) {
+                        return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_max[selected_feat]}]`
+                    } else {
+                        return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
+                    }
+                })
 
-        select_filter(selected_feat, -1);
+            select_filter(selected_feat, -1, d3.select('#filter_neg').property('value'));
+        }
     })
         
     // rule filter: feature values
@@ -337,75 +392,21 @@ function initialize_filters() {
         .on('change', function() {
             let feat_ix = d3.select('#filter_feat').property('value'),
                 val_ix = d3.select('#filter_val').property('value');
+                neg_ix = d3.select('#filter_neg').property('value');
             if (feat_ix >= 0) {
-                select_filter(feat_ix, val_ix)
+                select_filter(feat_ix, val_ix, neg_ix);
             }
-        })
+        });
 
-    // data filter: feature names
-    let data_filter_feat = d3.select('#data_filter_feat')
-        .attr('value', -1)
-
-    data_filter_feat.append('option')
-        .attr('value', -1)
-        .attr('class', 'feat4filter_default')
-        .text('-- choose a feature name --')
-
-    data_filter_feat.selectAll('.feat4filter')
-        .data(d3.range(attrs.length))
-        .enter()
-        .append('option')
-        .attr('class', 'feat4filter')
-        .attr('value', ix => ord_map[ix])
-        .text(ix=>attrs[ord_map[ix]]);
-
-    d3.select('#data_filter_feat').on('change', function() {
-        let val = d3.select(this).property('value'),
-            selected_feat = val;
-        // initialize feature value
-        d3.selectAll('.featval4filter').remove();
-
-        let val_options = d3.select('#data_filter_val')
-            .attr('value', -1)
-
-        if (selected_feat < 0) {
-            return
-        }
-
-        val_options.selectAll('.featval4filter')
-            .data(d3.range(filter_threshold['num_bin']))
-            .enter()
-            .append('option')
-            .attr('class', 'featval4filter')
-            .attr('value', (d,i)=>i)
-            .text((d, i) => {
-                if (i == 0) {
-                    return `[${real_min[selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
-                } else if (i == filter_threshold['num_bin']-1) {
-                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_max[selected_feat]}]`
-                } else {
-                    return `[${real_percentile.percentile_table[i-1][selected_feat]}, ${real_percentile.percentile_table[i][selected_feat]})`
-                }
-            })
-
-        select_data_filter(selected_feat, -1);
-    })
-
-    // data filter: feature values
-    d3.select('#data_filter_val')
-        .append('option')
-        .attr('value', -1)
-        .attr('class', 'featval4filter_default')
-        .text('-- any value --')
-
-    d3.select('#data_filter_val')
+    d3.select('#filter_neg')
         .on('change', function() {
-            let feat_ix = d3.select('#data_filter_feat').property('value'),
-                val_ix = d3.select('#data_filter_val').property('value');
+            let feat_ix = d3.select('#filter_feat').property('value'),
+                val_ix = d3.select('#filter_val').property('value');
+                neg_ix = d3.select('#filter_neg').property('value');
             if (feat_ix >= 0) {
-                select_data_filter(feat_ix, val_ix)
+                select_filter(feat_ix, val_ix, neg_ix);
             }
-        })
+        });
 }
 
 function scroll_functions(width, height, idx) {
@@ -415,6 +416,10 @@ function scroll_functions(width, height, idx) {
         d3.select(`#rule_svg${idx}`), 
         d3.select(`#col_svg${idx}`), 
         d3.select(`#stat${idx}`), idx);
+
+    d3.select(`#rule_div${idx}`)
+        .style("height", `${height + margin.bottom}px`)
+        .style("width", `${margin.left + width + margin.right}px`);
 
     d3.select(`#rule_div${idx} div`)
         .style("height", `${height + margin.bottom}px`)
@@ -479,6 +484,20 @@ function render_feature_names_and_grid(stat_legend, rule_svg, column_svg, stat_s
     column_svg.selectAll(".column").remove();
     column_svg.selectAll(".hist").remove();
 
+    // adjust column height
+    let max_attr_length = 0;
+    attrs.forEach((d) => {
+        let textLength = ctx.measureText(d).width;
+        max_attr_length = d3.max([max_attr_length, textLength]);
+    })
+    column_height = d3.min([max_attr_length, feat_name_height])+col_hist_height
+    column_svg.attr('height', column_height);
+
+    d3.select('#rule_div')
+        .style('max-height', `${560-column_height}px`);
+    d3.select('#stat_div')
+        .style('max-height', `${560-column_height}px`)
+
     let tab_idx = tab_id=="" ? 0 : tab_id-1;
 
     let column = column_svg.selectAll(".column").data(attrs)
@@ -498,7 +517,7 @@ function render_feature_names_and_grid(stat_legend, rule_svg, column_svg, stat_s
             let textLength = ctx.measureText(d).width;
             let text = d;
             let txt = d;
-            while (textLength > feat_name_height * 2 - 50) {
+            while (textLength > feat_name_height * 2 - 20) {
                 text = text.slice(0, -1);
                 textLength = ctx.measureText(text+'...').width;
                 txt = text+'...';
@@ -706,7 +725,7 @@ function prune_nodes() {
 
 function render_confusion_bars(stat_svg, listData, row_order) {
     let yScale = d3.scaleBand().domain(d3.range(listData.length+1))
-        .range([margin.top, height]);
+            .range([margin.top+.5, height-margin.bottom]);
 
     stat_svg.selectAll('.support').remove();
 
@@ -722,9 +741,9 @@ function render_confusion_bars(stat_svg, listData, row_order) {
         .attr('class', 'support')
         .attr('transform', (d, i)=> {
             let xoff = 0;
-            if (tab_idx>0) {
-                xoff = -3;
-            }
+            // if (tab_idx>0) {
+            //     xoff = -3;
+            // }
             if (row_sorted) {
                 return `translate(${xoff}, ${yScale(row_order[i])})`; 
             }
@@ -741,24 +760,17 @@ function render_confusion_bars(stat_svg, listData, row_order) {
     let pie = d3.pie()
           .value(function(d) {return d.value; });
 
-    // let circles = res.append("circle")
-    //     .attr("class", "label_circle")
-    //     .attr("cx", xScale.bandwidth()/2)
-    //     // .attr("cx", xScale.bandwidth()/2)
-    //     .attr("cy", (d, i) => {
-    //         return yScale.bandwidth()/2
-    //     })
-    //     // .attr("r", d => radiusScale(d["coverage"]))
-    //     .attr("r", rule_radius)
-    //     .attr("fill", d => colorCate[d["label"]])
-    //     .attr("stroke", "none");
-
     let circles = res.append('g')
         .attr('transform', `translate(${20}, ${rectHeight})`)
 
-    circles.selectAll('.label_circle').data(d => {
-        let data = {0: d3.sum(node_info[d['node_id']]['conf_mat'][0]), 
-            1: d3.sum(node_info[d['node_id']]['conf_mat'][1])}
+    circles.selectAll('.label_circle').data((d, i) => {
+        let data = {},
+            lnode_id = r2lattice[i][d['rules'].length-1],
+            conf_mat = lattice[lnode_id]['conf_mat'];
+
+        for (let ci = 0; ci < conf_mat.length; ci++) {
+            data[ci] = d3.sum(conf_mat[ci]);
+        }
         return pie(d3.entries(data))
     }).enter()
         .append('path')
@@ -777,37 +789,31 @@ function render_confusion_bars(stat_svg, listData, row_order) {
             let node_id = r2lattice[i][d['rules'].length-1],
                 size = confScale.range()[1],
                 tot = lattice[node_id]['support'],
+                conf_mat = [],
+                xoffset = 0;
 
-            conf_mat = [
-                {'name': 'fp', 
-                    'x': 0, 
-                    'width': lattice[node_id]['conf_mat'][0][1]/tot*size,
-                    'fill': 'url(#fp_pattern)', 
-                    'value': lattice[node_id]['conf_mat'][0][1], 
-                    'ratio': lattice[node_id]['conf_mat'][0][1]/tot, 
-                },
-                {'name': 'tp', 
-                    'x': lattice[node_id]['conf_mat'][0][1]/tot*size, 
-                    'width': lattice[node_id]['conf_mat'][0][0]/tot*size,
-                    'fill': colorCate[0],
-                    'value': lattice[node_id]['conf_mat'][0][0],
-                    'ratio': lattice[node_id]['conf_mat'][0][0]/tot, 
-                },
-                {'name': 'fn', 
-                    'x': d3.sum(lattice[node_id]['conf_mat'][0])/tot*size, 
-                    'width': lattice[node_id]['conf_mat'][1][0]/tot*size,
-                    'fill': 'url(#fn_pattern)',
-                    'ratio': lattice[node_id]['conf_mat'][1][0]/tot, 
-                    'value': lattice[node_id]['conf_mat'][1][0],
-                },
-                {'name': 'tn', 
-                    'x': (d3.sum(lattice[node_id]['conf_mat'][0])+lattice[node_id]['conf_mat'][1][0])/tot*size, 
-                    'width': lattice[node_id]['conf_mat'][1][1]/tot*size,
-                    'fill': colorCate[1],
-                    'value': lattice[node_id]['conf_mat'][1][1],
-                    'ratio': lattice[node_id]['conf_mat'][1][1]/tot, 
-                },
-            ];
+            target_names.forEach((d, i) => {
+                conf_mat.push({
+                    'name': `false_${d}`,
+                    'x': xoffset, 
+                    'width': lattice[node_id]['conf_mat'][i][1]/tot*size,
+                    'fill':  conf_fill[i*2], 
+                    'value': lattice[node_id]['conf_mat'][i][1], 
+                    'ratio': lattice[node_id]['conf_mat'][i][1]/tot, 
+                });
+
+                xoffset += lattice[node_id]['conf_mat'][i][1]/tot*size;
+                conf_mat.push({
+                    'name': `true_${d}`,
+                    'x': xoffset, 
+                    'width': lattice[node_id]['conf_mat'][i][0]/tot*size,
+                    'fill':  conf_fill[i*2+1], 
+                    'value': lattice[node_id]['conf_mat'][i][0], 
+                    'ratio': lattice[node_id]['conf_mat'][i][0]/tot, 
+                });
+                xoffset += lattice[node_id]['conf_mat'][i][0]/tot*size;
+            })
+
             return conf_mat;
         }).enter()
         .append('g')
@@ -868,29 +874,8 @@ function render_confusion_bars(stat_svg, listData, row_order) {
         // .text(d => `${d3.sum(node_info[d['node_id']]['value'])}`)
         .text(d => `${Math.floor(node_info[d['node_id']]['support']*tot_support)}`)
 
-    // accuracy
-    xoffset += supportRectWidth;
-    res.append('text')
-        .attr('class', 'label1-text')
-        .attr("x", xoffset + 10)
-        .attr("y", rectMarginTop + glyphCellHeight /2 +2)
-        .style('fill', 'black')
-        .text(d => {
-            let matched = 0,
-                node_id = r2lattice[i][d['rules'].length-1],
-                size = confScale.range()[1],
-                tot = lattice[node_id]['support'];
-
-            for (let x = 0; x < lattice[node_id]['conf_mat'].length; x++) {
-                matched += lattice[node_id]['conf_mat'][x][x];
-            }
-            node_info[d['node_id']]['accuracy'] = matched / tot;
-      
-            return `${d3.format('.2%')(node_info[d['node_id']]['accuracy'])}`
-        });
-
     // fidelity
-    xoffset += fidelityChartWidth;
+    xoffset += supportRectWidth;
     res.append('text')
         .attr('class', 'label1-text')
         .attr("x", xoffset + 10)
@@ -920,7 +905,6 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
     stat_legend.style('height', `${column_height}px`)
         .style('width', tab_idx > 0 ? `${compWidth+statWidth}px`: `${statWidth}px`);
 
-
     let rectHeight = glyphCellHeight + rectMarginTop + rectMarginBottom;
  
     // comparison
@@ -938,10 +922,7 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
 
         row.selectAll(".compare-fill")
             .data([
-                // {'x': 5, 'width': 15, 'color': '#636363'},
                 {'x': 5, 'width': 15, 'color': '#cccccc'},
-                // {'x': 20, 'width': 15,'color': '#969696'}, 
-                // {'x': 35, 'width': 15,'color': '#cccccc'}
                 ])
             .enter()
             .append("rect")
@@ -961,7 +942,6 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
 
     let res = stat_legend.append('g')
         .attr('class', 'legend')
-        // .attr('transform', `translate(${compWidth+10}, ${column_height-rectHeight})`);
         .attr('transform', () => {
             if (tab_idx==0)
                 return `translate(${0}, ${column_height-rectHeight})`
@@ -995,31 +975,23 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         .classed('mask', true)
         .attr('r', rule_radius)
 
-    let xoffset = 10 + 20;
+    let xoffset = 10 + 20,
+        count = target_names.length*2;
 
-    let fill_arr = ['url(#fp_pattern)', colorCate[0], 'url(#fn_pattern)', colorCate[1],],
-        text_arr = ['fp', 'tp', 'fn', 'tn'];
-
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < count; i++) {
         let conf_g = res.append('g')
             .attr('id', `stat_legend_${tab_idx}_${i}`)
-            .attr('transform', `translate(${xoffset+supportRectWidth*i/4}, ${rectHeight/4})`);
+            .attr('transform', `translate(${xoffset+supportRectWidth*i/count}, ${rectHeight/count})`);
 
         conf_g.append("rect")
-            .attr("width", supportRectWidth/4)
+            .attr("width", supportRectWidth/count)
             .attr("height", glyphCellHeight)
-            .attr("fill", fill_arr[i]);
-
-        // conf_g.append('text')
-        //     .attr("x", 2)
-        //     .attr("y", rectMarginTop+3)
-        //     .style('fill', 'white')
-        //     .text(text_arr[i]);
+            .attr("fill", conf_fill[i]);
 
         conf_g.append('rect')
             .classed('mask', true)
             .classed('unselected-stat', true)
-            .attr("width", supportRectWidth/4)
+            .attr("width", supportRectWidth/count)
             .attr("height", glyphCellHeight);
 
         conf_g.on('mouseover', function (){
@@ -1136,64 +1108,8 @@ function render_stat_legend(stat_legend, rule_svg, col_svg, stat_svg, tab_id) {
         update_rule_rendering(rule_svg, col_svg, stat_svg, tab_id, tab_rules[tab_idx], row_order,)
     });
 
-    // accuracy 
-    xoffset += supportRectWidth;
-    let accuracy_g = res.append('g')
-        .attr('transform', `translate(${xoffset}, ${rectHeight/4})`)
-        .attr('id', `stat_legend_accuracy_${tab_idx}`)
-
-    accuracy_g.append('text')
-        .attr('class', 'label1-text')
-        .attr("x", 3)
-        .attr('y', rectMarginTop+3)
-        .style('fill', 'black')
-        .text("accuracy");
-
-    accuracy_g.append('rect')
-        .classed('unselected-stat', true)
-        .classed('mask', true)
-        .attr('x', 3)
-        .attr('width', supportRectWidth * .8)
-        .attr('height', glyphCellHeight);
-
-    accuracy_g.on('mouseover', function (){
-        d3.select(this).select('.mask')
-            .classed('unselected-stat', false)
-            .classed('highlight-stat', true);
-    }).on('mouseout', function() {
-        let stat_id = d3.select(this)._groups[0][0].id,
-            tab_idx = parseInt(stat_id[stat_id.length-1]);
-        if (row_sorted!=='accuracy') {
-            d3.select(this).select('.highlight-stat')
-                .classed('unselected-stat', true)
-                .classed('highlight-stat', false);
-        }
-    }).on('click', function() {
-        let stat_id = d3.select(this)._groups[0][0].id,
-            tab_idx = parseInt(stat_id[stat_id.length-1]);
-            
-        if (row_sorted!=='accuracy') {
-            row_sorted = "accuracy";
-            col_clicked = false;
-            row_order = generate_row_order_by_key(tab_rules[tab_idx], 'accuracy');
-            d3.select(this.parentNode).selectAll('.mask')
-                        .classed('highlight-stat', false)
-                        .classed('unselected-stat', true);
-            d3.select(this).select('.mask')
-                .classed('highlight-stat', true)
-                .classed('unselected-stat', false)
-                .attr('r', rule_radius);   
-        } else {
-            row_sorted = false;
-            d3.select(this).select('.mask')
-                .classed('highlight-stat', false)
-                .classed('unselected-stat', true);
-        }
-        update_rule_rendering(rule_svg, col_svg, stat_svg, tab_id, tab_rules[tab_idx], row_order,)
-    });
-
     // fidelity 
-    xoffset += fidelityChartWidth;
+    xoffset += supportRectWidth;
     let fidelity_g = res.append('g')
         .attr('transform', `translate(${xoffset}, ${rectHeight/4})`)
         .attr('id', `stat_legend_fidelity_${tab_idx}`)
@@ -1253,8 +1169,46 @@ function main() {
     d3.select('#progress')
         .style("display", "block");
 
-    loadData();
-    param_set = true;
+    let url = new URL(window.location.href),
+        url_data = url.searchParams.get("d");
+
+    if (url_data !== null && url_data !== undefined) {
+        if (url_data.includes('intrusion')) {
+            intrusion = true;
+            url_data = url_data.split(' ')[1];
+        }
+        for (let option of document.getElementById("dataset").options) {
+            if (option.value == url_data) {
+                folder = url_data;
+                document.getElementById('dataset').value = url_data;
+                break;
+            }
+        }
+    }
+
+    set_default_rule_para();
+
+    loadData(intrusion, true);
+}
+
+function set_default_rule_para() {
+    if (folder.includes("wine")) {
+        filter_threshold = wine_rule_default_threshold;
+    } else if (folder == 'chemistry_pretrained') {
+        filter_threshold = amine_train_default_threshold;
+    } else if (folder == 'chemistry_pretrained_test') {
+        filter_threshold = amine_test_default_threshold
+    } else {
+        filter_threshold = default_threshold;
+    }
+
+    if (folder.includes("amine")){
+        filter_threshold['support']= 10;
+    }
+    document.getElementById('support_val').value = filter_threshold['support'];
+    document.getElementById('fidelity_val').value = filter_threshold['fidelity'];
+    document.getElementById('feature_val').value = filter_threshold['num_feat'];
+    document.getElementById('feature_bin').value = filter_threshold['num_bin'];
 }
 
 main();

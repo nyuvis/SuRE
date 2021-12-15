@@ -6,9 +6,8 @@ from scipy.cluster.hierarchy import ward, leaves_list
 from scipy.spatial import distance
 
 class Forest():
-    def initialize(self, node_info, real_min, real_max, real_percentile, df, y_pred, y_gt, rules, target_names):
+    def initialize(self, node_info, real_min, real_max, real_percentile, df, y_pred, y_gt, rules, target_names, n_cls):
         self.node_info = { int(x) : node_info[x] for x in node_info }
-        # self.node_info = node_info
         self.real_min = real_min
         self.real_max = real_max
         ranges = np.zeros(shape=(len(real_max), 2))
@@ -29,6 +28,7 @@ class Forest():
         self.y_gt = np.array(y_gt)
         self.rules = rules
         self.target_names = target_names
+        self.n_cls = n_cls
 
         self.real_percentile = real_percentile
         self.rep_range = np.zeros(shape=(len(real_min), real_percentile['num_bin'], 2))
@@ -55,7 +55,6 @@ class Forest():
         rid = 0
         for rule in self.rules:
             conds = rule['rules']
-            # matched_data = pd.DataFrame(data=self.cate_X, columns=cols)
             for cond in conds:
                 col = cond['feature']
                 t_idx = col * self.num_bin
@@ -67,11 +66,13 @@ class Forest():
     def initialize_rule_match_table(self):
         cols = self.df.columns
         self.rule_matched_table = np.zeros(shape=(len(self.rules), self.df.shape[0]))
+        self.rule_matched_table_all = np.zeros(shape=(len(self.rules), self.df.shape[0]))
+
         rid = 0
         for rule in self.rules:
             conds = rule['rules']
+            rule_pred = rule['label']
             matched_data = pd.DataFrame(self.df)
-            # matched_data = pd.DataFrame(data=self.cate_X, columns=cols)
             for cond in conds:
                 col = cols[cond['feature']]
                 if (cond['sign'] == '<='):  
@@ -87,7 +88,9 @@ class Forest():
                 else:
                     print("!!!!!! Error rule !!!!!!")
             matched_index = matched_data.index.values.astype(int)
-            self.rule_matched_table[rid, matched_index] = 1
+            correct_matched_index = [idx for idx in matched_index if self.y_pred[idx] == rule_pred ]
+            self.rule_matched_table_all[rid, matched_index] = 1
+            self.rule_matched_table[rid, correct_matched_index] = 1
             rid += 1
         d = distance.pdist(X=self.rule_matched_table, metric='jaccard')
         self.rule_similarity = distance.squareform(d)
@@ -170,7 +173,6 @@ class Forest():
         return linked_rules
 
     def find_node_rules(self, node_ids):
-        # min_node_id = np.min(node_ids)
         node_rules = []
         for node_id in node_ids:
             self.rule_traversal(node_id)
@@ -228,7 +230,6 @@ class Forest():
 
         cols = self.df.columns
         matched_data = pd.DataFrame(self.df)
-        # matched_data = pd.DataFrame(data = self.cate_X, columns=cols)
         included_index = []
         for rule in rule_list:
             for cond in rule['rules']:
@@ -305,11 +306,11 @@ class Forest():
                 go_on = False
             else:
                 # update distance to target set
-                # D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) / self.rule_matched_table[key].sum() for key in D}
-                # D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) / (np.logical_and(target_overlapping, self.rule_overlapping[key])).sum() for key in D}
                 D = {key: (np.logical_or(target_matched_vector, self.rule_matched_table[key]).sum() - target_matched_vector.sum()) for key in D}
                 rid = max(D, key=D.get)
                 if (D[rid] <= 0):
+                    go_on = False
+                if (D[rid] / target_matched_vector.shape[0] <= 0.005):
                     go_on = False
 
         self.target_set = target_set
@@ -320,8 +321,7 @@ class Forest():
         # get thr row order by label
         self.rule_ord = self.get_order_by_label(target_set)
 
-        # get coverage
-        coverage = float(target_matched_vector.sum()) / target_matched_vector.shape[0]
+
         target_rule_set = []
         text_rules = []
         for rule_ord in self.rule_ord:
@@ -332,7 +332,13 @@ class Forest():
             # text_rules.append(self.get_rule_text(r))
             target_rule_set.append(r)
         self.target_rule_set = target_rule_set
-        return {'rules': target_rule_set, "tot_rule": len(self.rules), "coverage": coverage, "text_rules": text_rules}
+
+        # get coverage
+        self.coverage = float(target_matched_vector.sum()) / target_matched_vector.shape[0]
+        self.all_coverage = self.get_stat_after_filter(target_rule_set)
+
+        return {'rules': target_rule_set, "tot_rule": len(self.rules), "correct_coverage": self.coverage,
+        "coverage": self.all_coverage, "text_rules": text_rules}
 
     def get_rule_text(self, r):
         rule_str = "If "
@@ -523,21 +529,26 @@ class Forest():
         for the_rule in rules:
             # order conditions
             r = the_rule['rules']
-            # r.sort(key=lambda x: col_order[x['feature']])
+            r.sort(key=lambda x: x['pid'])
             # add rule to index tree
             lattice_node, cond_idx = self.find_common_ancestor_lattice(r)
             # update lattice hierarchy
             self.update_subtree_node_lattice(lattice_node, r, cond_idx)
 
         # initialize prediction/ground_truth contribution
-        self.conf_cont = np.zeros(shape=(2,2,self.df.shape[0]))
-        self.conf_cont[0,0,:] = self.initialize_bb_gt_contribution(0, 0)
-        self.conf_cont[0,1,:] = self.initialize_bb_gt_contribution(0, 1)
-        self.conf_cont[1,0,:] = self.initialize_bb_gt_contribution(1, 0)
-        self.conf_cont[1,1,:] = self.initialize_bb_gt_contribution(1, 1)
+        self.conf_cont = np.zeros(shape=(self.n_cls, 2, self.df.shape[0]))
+        for i in range(self.n_cls):
+            self.conf_cont[i,0,:] = self.initialize_bb_gt_contribution(i, 0)
+            self.conf_cont[i,1,:] = self.initialize_bb_gt_contribution(i, 1)
 
         # calculate support and confusion matrix 
         self.update_lattice_stat(0, np.ones(self.df.shape[0]))
+
+        # get preorder
+        self.tot_idx = -1
+        self.preIndex = {}
+        self.latticePreOrderTraverse(0)
+
         return self.lattice
 
     def find_common_ancestor_lattice(self, rule):
@@ -595,11 +606,11 @@ class Forest():
     def update_lattice_stat(self, node_id, match_vector):
         # update lattice node info
         self.lattice[node_id]['support'] = np.sum(match_vector)
-        conf_matrix = np.zeros(shape=(2,2))
-        conf_matrix[0][0] = np.sum(np.logical_and(self.conf_cont[0][0], match_vector))
-        conf_matrix[0][1] = np.sum(np.logical_and(self.conf_cont[0][1], match_vector))
-        conf_matrix[1][0] = np.sum(np.logical_and(self.conf_cont[1][0], match_vector))
-        conf_matrix[1][1] = np.sum(np.logical_and(self.conf_cont[1][1], match_vector))
+        conf_matrix = np.zeros(shape=(self.n_cls,2))
+        for i in range(self.n_cls):
+            conf_matrix[i][0] = np.sum(np.logical_and(self.conf_cont[i][0], match_vector))
+            conf_matrix[i][1] = np.sum(np.logical_and(self.conf_cont[i][1], match_vector))
+
         self.lattice[node_id]['conf_mat'] = conf_matrix.tolist()
         
         # initialize data to be matched
@@ -634,38 +645,90 @@ class Forest():
             new_match_vector[matched_index] = 1
             self.update_lattice_stat(child, new_match_vector)
 
-    def initialize_bb_gt_contribution(self, black_box, ground_truth):
-        idx = [i for i in range(len(self.y_gt)) if self.y_pred[i]==black_box and self.y_gt[i]==ground_truth]
+    def latticePreOrderTraverse(self, root):
+        self.preIndex[self.lattice[root]['node_id']] = self.tot_idx
+        for child_id in self.lattice[root]['children_id']:
+            self.tot_idx += 1
+            self.latticePreOrderTraverse(child_id)
+
+
+    def initialize_bb_gt_contribution(self, black_box, error):
+        if (error == 0):
+            idx = [i for i in range(len(self.y_gt)) if self.y_pred[i]==black_box and self.y_gt[i]==black_box]
+        else:
+            idx = [i for i in range(len(self.y_gt)) if self.y_pred[i]==black_box and self.y_gt[i]!=black_box]
+
         cont_vector = np.zeros(self.df.shape[0])
         cont_vector[idx] = 1
         return cont_vector
        
     def filter_rules(self, filters):
-        print(filters)
         feat_filter = filters['feat_filter']
         pred_filter = int(filters['pred_filter'])
+        neg_filter = {}
 
         if (len(feat_filter.keys()) == 0 and pred_filter<0):
-            return self.target_rule_set 
+            return self.target_rule_set, self.coverage
+
+        features = list(feat_filter.keys())
+        for feat in features:
+            if (feat_filter[feat]['neg'] == '1'):
+                neg_filter[feat] = feat_filter[feat]['val_ix']
+                del feat_filter[feat]
+        print(feat_filter)
+        print(neg_filter)
 
         to_present = []
         for the_rule in self.target_rule_set:
             rule = the_rule['rules']
-            to_add = False
-            if (the_rule['label'] == pred_filter or pred_filter == -1):
-                if (len(feat_filter.keys()) == 0):
-                    to_add = True
-                else:
-                    for cond in rule:
-                        if (str(cond['feature']) not in feat_filter.keys()):
-                            continue
-                        if (int(feat_filter[str(cond['feature'])]) != -1 and (int(feat_filter[str(cond['feature'])]) not in cond['range'])):
-                            continue
-                        to_add = True
-                        break
-            if (to_add):
+
+            # prediction filters
+            if (the_rule['label'] != pred_filter and pred_filter != -1):
+                continue
+
+            # negation conditions
+            matched = True
+            if (len(neg_filter.keys())>0):
+                for cond in rule:
+                    feat = str(cond['feature'])
+                    if (feat in neg_filter.keys()):
+                        val_ix = int(neg_filter[feat])
+                        if (val_ix == -1):
+                            matched = False
+                            break
+                        elif (val_ix in cond['range']):
+                            matched = False
+                            break
+            if (not matched):
+                continue
+
+            # feat contain conditions
+            matched = 0
+            if (len(feat_filter.keys()) > 0):
+                for cond in rule:
+                    feat = str(cond['feature'])
+                    if (feat in feat_filter.keys()):
+                        # contain a filter of this feature
+                        val_ix = int(feat_filter[feat]['val_ix'])
+                        if (val_ix == -1 or val_ix in cond['range']):
+                            matched += 1
+                        else:
+                            break
+            # add rule to the result list
+            if (matched == len(feat_filter.keys())):
                 to_present.append(the_rule)
-        return to_present
+
+        coverage = self.get_stat_after_filter(to_present)
+        return to_present, coverage
+
+    def get_stat_after_filter(self, rules):
+        cols = self.df.columns
+        subgroup = np.zeros(shape=self.df.shape[0])
+        for rule in rules:
+            rid = rule['rid']
+            subgroup = np.logical_or(self.rule_matched_table_all[rid], subgroup)
+        coverage = subgroup.sum() / self.df.shape[0]
+        return coverage
 
     def find_rules_for_subgroups(self, data_filters):
         print(data_filters)
@@ -676,10 +739,11 @@ class Forest():
         subgroup = np.zeros(self.df.shape[0])
         to_present = []
 
-        # initialize mathced vector
+        # initialize matched vector
         matched_data = pd.DataFrame(self.df)
         for feat in data_filters.keys():
-            val = int(data_filters[feat])
+            val = int(data_filters[feat]['val_ix'])
+            neg = int(data_filters[feat]['neg'])
             feat_idx = int(feat)
             col = cols[feat_idx]
             if (val < 0): 
@@ -695,16 +759,13 @@ class Forest():
                 th0 = self.real_percentile['percentile_table'][val-1][feat_idx]
                 th1 = self.real_percentile['percentile_table'][val][feat_idx]
 
-            matched_data = matched_data[(matched_data[col] >= th0) & (matched_data[col] < th1)]
+            if (neg == 0):
+                matched_data = matched_data[(matched_data[col] >= th0) & (matched_data[col] < th1)]
+            else:
+                matched_data = matched_data[(matched_data[col] < th0) | (matched_data[col] >= th1)]
+
             matched_index = matched_data.index.values.astype(int)
             subgroup[matched_index] = 1
-
-        # find descriptive rules
-        # for rule_idx in range(len(self.rule_ord)):
-        #     if (np.logical_and(subgroup, self.rule_matched_table[self.rule_ord[rule_idx]]).sum() > 0):
-        #         rid = target_set[rule_ord]
-        #     r = self.rules[rid]
-        #         to_present.append(self.rules[rule_idx])
 
         for rule_ord in self.rule_ord:
             rid = self.target_set[rule_ord]

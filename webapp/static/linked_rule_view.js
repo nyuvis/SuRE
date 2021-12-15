@@ -201,8 +201,50 @@ function rule_unhover(idx, r_i) {
     d3.selectAll('.rule_hover')
         .classed('rule_hover', false)
 
-    d3.select('#rule_description_hovered').selectAll('p').remove();
-    d3.select('#rule_stat_hovered').select('g').remove();
+    d3.select('#highlighted_desp').selectAll('p').remove();
+    d3.select('#highlighted_stat').select('g').remove();
+
+    d3.selectAll('.selected_div')
+            .style('display', 'flex');
+}
+
+function hover_rule(clicked_g, rule_idx, rule, tab_p) {
+    let tab_id;
+    if (tab_p == '') {
+        tab_id = 0;
+    } else {
+        tab_id = +tab_p - 1;
+    }
+    // hide selected node info
+    d3.selectAll('.selected_div')
+            .style('display', 'none');
+
+    // highlight the rule in the rule view
+    clicked_g.select('.back-rect')
+        .classed('rule_hover', true);
+    // highlight in the stat
+    d3.select(`#stat${tab_p}-back-rect-${rule_idx}`)
+        .classed('rule_hover', true);
+    // highlight in the compare
+    d3.select(`#comp${tab_p}-back-rect-${rule_idx}`)
+        .classed('rule_hover', true);
+
+    // update rule description
+    let rule_des = d3.select('#highlighted_desp');
+
+    let rules = listData[rule_idx];
+    if (rule) {
+        rules = rule;
+    }
+
+    let [str, cond_str] = generate_tabular_rule(rules)
+
+    // console.log(cond_str);
+    
+    rule_des.append('p')
+        .html(str);
+
+    show_node_stat('#highlighted_stat', r2lattice[rule_idx][listData[rule_idx]['rules'].length-1]);
 }
 
 function generate_value_cells(row,) {
@@ -264,11 +306,11 @@ function render_comparison_bar(comp_svg, idx, row_order, compare_data) {
 
     if (clicked_rule_idx < 0) return;
     
-    height = compare_data.length * (glyphCellHeight + rectMarginTop + rectMarginBottom) + margin.top + margin.bottom;
+    height = (1+compare_data.length) * (glyphCellHeight + rectMarginTop + rectMarginBottom) + margin.top + margin.bottom;
     
     // scale for placing cells
     let yScale = d3.scaleBand().domain(d3.range(compare_data.length+1))
-        .range([margin.top, height]),
+        .range([margin.top+.5, height-margin.bottom]),
         tab_idx = idx !== "" ? idx-1 : 0;
 
     comp_svg.style('height', height);

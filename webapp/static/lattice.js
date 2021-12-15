@@ -9,6 +9,7 @@ let max_num,
 
 function render_lattice() {
     d3.selectAll('#lattice > *').remove();
+    render_lattice_size_legend('#lattice_legend');
 
     let lattice_height = (filter_threshold['num_feat']-1) * (unit_height+margin_v)+feat_name_height+unit_height*2;
     d3.select('#lattice')
@@ -45,7 +46,7 @@ function update_lattice_graph() {
             let textLength = ctx.measureText(d).width;
             let text = d;
             let txt = d;
-            while (textLength > feat_name_height * 2 - 50) {
+            while (textLength > feat_name_height * 2 - 20) {
                 text = text.slice(0, -1);
                 textLength = ctx.measureText(text+'...').width;
                 txt = text+'...';
@@ -130,8 +131,6 @@ function update_lattice_graph() {
             return `translate(${x_offset}, ${y_offset})`
         })
 
-    // let conf_fill = [ '#4f7d8c',colorCate[0],`#995a57`, colorCate[1],]
-    let conf_fill = ['url(#fp_pattern)', colorCate[0], 'url(#fn_pattern)', colorCate[1]]
     conf_mat_nodes.selectAll('.lattice_conf_mat')
         .data((d) => {
             // let cid=d['cid'],
@@ -139,36 +138,34 @@ function update_lattice_graph() {
             let node_id = d['node_id'];
 
             let size = summary_size_.range()[1],
-                scale = summary_size_(lattice[node_id]['support']) / size,
+                scale = apply_lattice_scale ? summary_size_(lattice[node_id]['support']) / size : .9,
                 tot = lattice[node_id]['support'],
-                v0 = d3.sum(lattice[node_id]['conf_mat'][0]), 
-                v1 = d3.sum(lattice[node_id]['conf_mat'][1]);
-            conf_mat = [
-                {'name': 'fp', 'id':node_id, 'scale': scale,
-                    'x': -size/2, 
-                    'width': size*v0/tot,
-                    'y': -size/2, 
-                    'height': v0 > 0 ? size*lattice[node_id]['conf_mat'][0][1]/v0 : 0,
-                },
-                {'name': 'tp', 'id':node_id,'scale': scale,
-                    'x': -size/2, 
-                    'width': size*v0/tot,
-                    'y': v0 > 0 ? -size/2+size*lattice[node_id]['conf_mat'][0][1]/v0 : 0, 
-                    'height': v0 > 0 ? size*lattice[node_id]['conf_mat'][0][0]/v0 : 0,
-                },
-                {'name': 'fn', 'id':node_id,'scale': scale,
-                    'x': -size/2+size*v0/tot, 
-                    'width': size*v1/tot,
-                    'y': -size/2, 
-                    'height': v1 > 0 ? size*lattice[node_id]['conf_mat'][1][0]/v1 : 0,
-                },
-                {'name': 'tn', 'id':node_id,'scale': scale,
-                    'x': -size/2+size*v0/tot, 
-                    'width': size*v1/tot,
-                    'y': v1 > 0 ? -size/2+size*lattice[node_id]['conf_mat'][1][0]/v1: 0, 
-                    'height': v1 > 0 ? size*lattice[node_id]['conf_mat'][1][1]/v1 : 0,
-                },
-            ];
+                conf_mat = [],
+                x_offset = -size/2;
+
+            for (let i = 0; i < lattice[node_id]['conf_mat'].length; i++) {
+                let v = d3.sum(lattice[node_id]['conf_mat'][i]);
+                conf_mat.push({
+                    'id': node_id,
+                    'scale': scale,
+                    'x': x_offset,
+                    'width': size * v / tot,
+                    'y': -size/2,
+                    'height': v > 0 ? size * lattice[node_id]['conf_mat'][i][1]/v : 0,
+                });
+
+                conf_mat.push({
+                    'id': node_id,
+                    'scale': scale,
+                    'x': x_offset,
+                    'width': size * v / tot,
+                    'y': v > 0 ? -size/2 + size*lattice[node_id]['conf_mat'][i][1]/v : 0,
+                    'height': v > 0 ? size * lattice[node_id]['conf_mat'][i][0]/v : 0,
+                });
+
+                x_offset += size*v/tot;
+            }
+
             return conf_mat;
         }).enter()
         .append('g')
@@ -186,8 +183,7 @@ function update_lattice_graph() {
         .data(function(d) { 
             let node_id = d['node_id']
             let feat = d['feature'],
-                // size = summary_size_(lattice[r2lattice[d['rid']][d['cid']]]['support'])/2,
-                size = summary_size_(lattice[node_id]['support'])/2,
+                size = apply_lattice_scale ? summary_size_(lattice[node_id]['support'])/2 : summary_size_.range()[1]/2,
                 to_render = [];
 
             cond = listData[lattice2r[node_id][0]]['rules'][lattice2r[node_id][1]]
@@ -213,16 +209,14 @@ function update_lattice_graph() {
         .attr("stroke", "black");
 
     // node clickevent
-    
     conf_mat_nodes
         .append('rect')
         .attr('class', 'node_mask')
-        // .attr('id', d=>`nodemask-${r2lattice[d['rid']][d['cid']]}`)
         .attr('id', (d, node_id) =>`nodemask-${d['node_id']}`)
-        .attr('x', d=>-summary_size_(lattice[d['node_id']]['support'])/2)
-        .attr('y', d=>-summary_size_(lattice[d['node_id']]['support'])/2)
-        .attr('width', d=>summary_size_(lattice[d['node_id']]['support']))
-        .attr('height', d=>summary_size_(lattice[d['node_id']]['support']))
+        .attr('x', d=> apply_lattice_scale ? -summary_size_(lattice[d['node_id']]['support'])/2: -summary_size_.range()[1]/2)
+        .attr('y', d=> apply_lattice_scale ? -summary_size_(lattice[d['node_id']]['support'])/2: -summary_size_.range()[1]/2)
+        .attr('width', d=> apply_lattice_scale ? summary_size_(lattice[d['node_id']]['support']): summary_size_.range()[1])
+        .attr('height', d=> apply_lattice_scale ? summary_size_(lattice[d['node_id']]['support']): summary_size_.range()[1])
         .on('click', (d) => {
             node_click(lattice2r[d['node_id']][0], lattice2r[d['node_id']][1]);          
         })
@@ -235,7 +229,7 @@ function update_lattice_graph() {
 
     conf_mat_nodes.append('text')
         .attr('class', 'lattice_cond')
-        .attr('y', d=>summary_size_(lattice[d['node_id']]['support'])/2 + sqWidth/2 + 15)
+        .attr('y', d=> apply_lattice_scale ? summary_size_(lattice[d['node_id']]['support'])/2 + sqWidth/2 + 15 : summary_size_.range()[1]/2 + sqWidth/2 + 15)
         .text(d => {
             if (d['sign']=='range') {
                 let str = `[${readable_text(d['threshold0'])}, ${readable_text(d['threshold1'])}`;
@@ -253,7 +247,18 @@ function update_lattice_graph() {
                 return `${sign}${readable_text(d['threshold'])}`;
             }
         })
-        // .style('visibility', 'hidden')
+
+    // render select numbering
+    let saved_node_mark = conf_mat_nodes.append('g')
+        .attr('class', (d) => d['node_id'] in saved_rules && show_saved_node_mark? 'saved_node_highlight saved_node' : 'saved_node_hidden saved_node' )
+        .attr('id', (d) =>`saved_node-${d['node_id']}`)
+        .attr('transform', (d) => `translate(${-summary_size_(lattice[d['node_id']]['support'])/2-6}, ${-summary_size_(lattice[d['node_id']]['support'])/2-6})`);
+
+    saved_node_mark.append('circle')
+        .attr('r', 6);
+
+    saved_node_mark.append('text')
+        .text((d) => d['node_id'] in saved_rules ? saved_rules[d['node_id']].idx+1 : "");
 }
 
 function construct_lattice() {
@@ -268,7 +273,6 @@ function construct_lattice() {
     // set position
     listData.forEach((conds, rid) => {
         let rule = conds['rules'].slice();
-        // rule = rule.sort((a, b) => col_order[a['feature']] - col_order[b['feature']]);
         r2lattice[rid] = {};
         let parent = 0;
         rule.forEach((cond, cid) => {
@@ -278,7 +282,6 @@ function construct_lattice() {
             parent = lattice_node_id;
             if (!pos2r[col_order[cond['feature']]][cid].includes(lattice_node_id )) {
                 pos2r[col_order[cond['feature']]][cid].push(lattice_node_id);
-                // r2pos[lattice_node_id] = pos2r[col_order[cond['feature']]][cid].length-1;   
             }
         });
     });
@@ -366,16 +369,21 @@ function node_click(rid, cid) {
         .classed('lattice_node_selected', false)
         .classed('lattice_node', true);
 
+    d3.selectAll(`.rule_node_selected`)    
+        .classed('rule_node_selected', false)
+        .classed('rule_node', true);
+
     d3.select('#selected_stat g').remove();
     d3.select('#rule_stat_selected g')
             .remove();
+    d3.select('#hrule_stat_selected g')
+            .remove();
 
-    if (r2lattice[rid][cid] != lattice_node_selected) {
-        // highlight the rule in the rule view
+    d3.selectAll('.selected_div')
+            .style('display', 'none');
+
+    if (!(r2lattice[rid][cid] in saved_rules)) { 
         lattice_node_selected = r2lattice[rid][cid];
-        
-        d3.selectAll('.selected_div')
-            .style('display', 'flex');
         
         d3.select(`#ruleg--${rid}`).select('.back-rect')
             .classed('rule_highlight', true);
@@ -387,10 +395,10 @@ function node_click(rid, cid) {
             .classed('lattice_node_hovered', false)
             .classed('lattice_node_selected', true);
 
-        d3.select('#selected_save')
-            .style('display', 'flex');
-        d3.select('#rule_selected_save')
-            .style('display', 'flex');
+        d3.select(`#hlist_content-${lattice_node_selected}`)    
+            .classed('rule_node', false)
+            .classed('rule_node_hovered', false)
+            .classed('rule_node_selected', true);
 
         // highlight lattice path
         select_lattice_ancestors(rid, cid, true)
@@ -398,27 +406,26 @@ function node_click(rid, cid) {
         lattice[lattice_node_selected]['children_id'].forEach((child) => {
             d3.select(`#lattice-link-${lattice_node_selected}-${child}`)
                 .classed('lattice_selected', true)
-
-            // d3.select(`#latnode-${child}`)    
-            //     .classed('lattice_node', false)
-            //     .classed('lattice_node_hovered', false)
-            //     .classed('lattice_node_selected', true);
         });
 
-        let rule_str = generate_rule_desp(rid, cid);
+        let rule_str = generate_rule_desp(lattice_node_selected, cid);
 
         d3.select('#selected_desp')
             .html(rule_str)
         d3.select('#rule_description_selected')
             .html(rule_str);
+        d3.select('#hrule_description_selected')
+            .html(rule_str);
+
         show_node_stat('#selected_stat', r2lattice[rid][cid]);
-        show_node_stat('#rule_stat_selected', r2lattice[rid][cid]);
+
+        selected_rule_text = generate_rule_plain_text(r2lattice[rid][cid], cid);
+
+        // add to saved rule
+        rule_save();
     } else {
         // remove selected rule view
-        d3.select('#selected_stat')
-            .style('display', 'none');
-
-        d3.select('#rule_stat_selected')
+        d3.selectAll('.selected_div')
             .style('display', 'none');
 
         // fade away the rule in the rule view
@@ -431,11 +438,19 @@ function node_click(rid, cid) {
         d3.selectAll('.lattice_selected')
             .classed('lattice_selected', false);
 
+        d3.selectAll('.list_link_selected')
+            .classed('list_link_selected', false);
+
         // hide text
         d3.selectAll(`.lattice_node_selected`)    
             .classed('lattice_node', true)
             .classed('lattice_node_hovered', false)
             .classed('lattice_node_selected', false);
+
+        d3.selectAll(`.rule_node_selected`)    
+            .classed('rule_node', true)
+            .classed('rule_node_hovered', false)
+            .classed('rule_node_selected', false);
 
         d3.selectAll('.selected_div')
             .style('display', 'none');
@@ -447,17 +462,30 @@ function node_click(rid, cid) {
             .html("");
         d3.select('#selected_stat g')
             .remove();
+
+        // remove from rule saved
+        rule_remove(r2lattice[rid][cid]);
     }
 }
 
 function node_hover(node_id) {
     d3.selectAll('.lattice_link')
-        .classed('lattice_highlight', false)
-    
+        .classed('lattice_highlight', false);
+
+    d3.selectAll('.list_link')
+        .classed('list_link_highlight', false);
+    // hide selected node info
+    d3.selectAll('.selected_div')
+            .style('display', 'none');
+
     // grey out all nodes
     d3.selectAll('.lattice_node')
         .classed('lattice_node', false)
         .classed('lattice_node_greyout', true);
+
+    d3.selectAll('.rule_node')
+        .classed('rule_node', false)
+        .classed('rule_node_greyout', true);
 
     // highlight the feature of hovered node
     d3.select(`#col-${lattice[node_id]['feature']}`)
@@ -470,35 +498,91 @@ function node_hover(node_id) {
     // show node text
     d3.select(`#latnode-${node_id}`)
         .classed('lattice_node_greyout', false)
-        .classed('lattice_node_hovered', true)
+        .classed('lattice_node_hovered', true);
+
+    d3.select(`#hlist_content-${node_id}`)
+        .classed('rule_node_greyout', false)
+        .classed('rule_node_hovered', true);
             
+    // show children 
     lattice[node_id]['children_id'].forEach((child) => {
         d3.select(`#lattice-link-${node_id}-${child}`)
             .classed('lattice_highlight', true)
 
         // show text
         d3.select(`#latnode-${child}`)
+            .classed('lattice_node_greyout', false)
             .classed('lattice_node', false)
             .classed('lattice_node_hovered', true)
     });
 
+    let rule_str = generate_rule_desp(node_id, lattice2r[node_id][1]);
+
     d3.select('#highlighted_desp')
-        .html(generate_rule_desp(lattice2r[node_id][0], lattice2r[node_id][1]));
+        .html(rule_str);
+
+    d3.select('#hrule_description_hovered')
+        .html(rule_str);
 
     show_node_stat('#highlighted_stat', node_id);
+    show_tooltip(node_id, rule_str);
+}
+
+function show_tooltip(node_id, rule_str=undefined, cid=undefined) {
+    let size = summary_size_(lattice[0]['support']) * 3,
+        tot = lattice[node_id]['support'],
+        percentage = tot / lattice[0]['support'],
+        fidelity = d3.max(d3.range(lattice[node_id]['conf_mat'].length), d => d3.sum(lattice[node_id]['conf_mat'][d])) / tot,
+        y_offset = 0;
+
+    d3.select('#node_tooltip').transition()        
+        .duration(200)      
+        .style("opacity", .9);      
+    d3.select('#node_tooltip')
+        .html(() => {
+            let stat = `coverage: ${tot} (${(percentage*100).toFixed(2)}%) <br/>fidelity: ${(fidelity*100).toFixed(2)}%`
+            if (rule_str !== undefined) {
+                return `${rule_str} <br/> ${stat}`;
+            } else return stat;
+        })  
+        .style("left", (d3.event.pageX) + "px")     
+        .style("top", (d3.event.pageY - 28) + "px");
+    if (rule_str !== undefined) {
+        d3.select('#node_tooltip')
+            .style('height', `${30+(lattice2r[node_id][1]+1)*14}px`)
+    } else {
+        d3.select('#node_tooltip')
+            .style('height', '30px')
+    }
+}
+
+function remove_tooltip() {
+    d3.select('#node_tooltip').transition()        
+        .duration(200)      
+        .style("opacity", 0);   
 }
 
 function highlight_lattice_ancestors(node_id) {
   // find ancesters
   let p_id = node_id;
   while (p_id > 0) {
+    // highlight link
     d3.select(`#lattice-link-${lattice[p_id]['parent']}-${p_id}`)
         .classed('lattice_highlight', true);
 
+    d3.select(`#hlist-link-${lattice[p_id]['parent']}-${p_id}`)
+        .classed('list_link_highlight', true);
+
+    // highlight node
     d3.select(`#latnode-${p_id}`)
         .classed('lattice_node_hovered', true)
         .classed('lattice_node_greyout', false);
 
+    d3.select(`#hlist_content-${p_id}`)
+        .classed('rule_node_greyout', false)
+        .classed('rule_node_hovered', true);
+
+    // highlight lattice column
     d3.select(`#col-${lattice[p_id]['feature']}`)
         .classed('column_highlight', true)
         .classed('column', false);
@@ -512,12 +596,24 @@ function node_unhover(node_id) {
         .classed('lattice_node', true)
         .classed('lattice_node_hovered', false)
 
+
+    d3.selectAll(`.rule_node_hovered:not(.rule_node_selected)`)
+        .classed('rule_node', true)
+        .classed('rule_node_hovered', false)
+
     d3.selectAll('.lattice_highlight')
         .classed('lattice_highlight', false);
+
+    d3.selectAll('.list_link_highlight')
+            .classed('list_link_highlight', false);
 
     d3.selectAll('.lattice_node_greyout')
         .classed('lattice_node_greyout', false)
         .classed('lattice_node', true);
+
+    d3.selectAll('.rule_node_greyout')
+        .classed('rule_node_greyout', false)
+        .classed('rule_node', true);
 
     d3.selectAll(`.column_highlight`)
         .classed('column_highlight', false)
@@ -527,54 +623,64 @@ function node_unhover(node_id) {
         .html("");
     d3.select('#highlighted_stat g')
         .remove();
+
+    d3.selectAll('.selected_div')
+            .style('display', 'flex');
+
+    remove_tooltip();
 }
 
-function generate_rule_plain_text(rid, cid) {
+function generate_rule_plain_text(node_id, cid) {
     // update rule description
-    let rules = listData[rid];
     let str = "";
 
-    let rule_to_show = Array.from(rules['rules']);
-    // rule_to_show.sort((a, b) => col_order[a['feature']] - col_order[b['feature']]);
+    let pid = node_id, rule_to_show=[];
+
+    while (pid > 0) {
+        rule_to_show.unshift(lattice[pid]);
+        pid = lattice[pid]['parent'];
+    }
+
     for (let i = 0; i <= cid; i++) {
         if (i>0) {
-            str += "AND "
+            str += " AND "
         } else {
-            str += " IF "
+            str += "IF "
         }
         let d = rule_to_show[i];
         str += `${attrs[d['feature']]}`;
         if (d['sign'] !== 'range') {
-            // str += " " + d['sign'];
-            // if (d['sign'] == '>') str += '=';
             if (d['sign'] == '<=') {
-                str += "<";
-                // if (d['threshold'] == real_max[d['feature']]) str += '=';
+                str += " < ";
             } else {
-                str += ">=";
+                str += " >= ";
             }
             str += readable_text(d['threshold']) + " "
         } else {
-            // str += " btw. (" + d['threshold0'] + ', ' + d['threshold1'] + '] '
-            // let threshold0 = real_percentile['percentile_table'][Math.ceil(d['threshold0'])][d['feature']],
-            //  threshold1 = real_percentile['percentile_table'][Math.floor(d['threshold1'])][d['feature']]
-
             str += " from " + readable_text(d['threshold0']) + " to " + readable_text(d['threshold1']) + " ";
         }
     }
 
-    if (cid == rules['rules'].length - 1 || cid == rules['rules'].length - 2 && lattice[r2lattice[rid][cid]]['children_id'].length == 1) {
-        str += "THEN " + target_names[rules['label']];
+    let label = 0;
+    if (d3.sum(lattice[node_id]['conf_mat'][0]) <  d3.sum(lattice[node_id]['conf_mat'][1])) {
+        label = 1;
     }
+    str += " THEN " + target_names[label];
+
     return str;
 }
 
-function generate_rule_desp(rid, cid) {
+function generate_rule_desp(node_id, cid) {
     // update rule description
-    let rules = listData[rid];
     let str = "";
 
-    let rule_to_show = Array.from(rules['rules']);
+    let pid = node_id, rule_to_show=[];
+
+    while (pid > 0) {
+        rule_to_show.unshift(lattice[pid]);
+        pid = lattice[pid]['parent'];
+    }
+
     // rule_to_show.sort((a, b) => col_order[a['feature']] - col_order[b['feature']]);
     for (let i = 0; i <= cid; i++) {
         if (i>0) {
@@ -585,27 +691,22 @@ function generate_rule_desp(rid, cid) {
         let d = rule_to_show[i];
         str += `<u>${attrs[d['feature']]}</u>`;
         if (d['sign'] !== 'range') {
-            // str += " " + d['sign'];
-            // if (d['sign'] == '>') str += '=';
             if (d['sign'] == '<=') {
                 str += "<";
-                // if (d['threshold'] == real_max[d['feature']]) str += '=';
             } else {
                 str += ">=";
             }
             str += readable_text(d['threshold']) + " "
         } else {
-            // str += " btw. (" + d['threshold0'] + ', ' + d['threshold1'] + '] '
-            // let threshold0 = real_percentile['percentile_table'][Math.ceil(d['threshold0'])][d['feature']],
-            //  threshold1 = real_percentile['percentile_table'][Math.floor(d['threshold1'])][d['feature']]
-
             str += " from " + readable_text(d['threshold0']) + " to " + readable_text(d['threshold1']) + " ";
         }
     }
 
-    if (cid == rules['rules'].length - 1 || cid == rules['rules'].length - 2 && lattice[r2lattice[rid][cid]]['children_id'].length == 1) {
-        str += "<b><br/>THEN</b> " + `<span style="color: ${colorCate[rules['label']]}">` + target_names[rules['label']] + "</span>.";
+    let label = 0;
+    if (d3.sum(lattice[node_id]['conf_mat'][0]) <  d3.sum(lattice[node_id]['conf_mat'][1])) {
+        label = 1;
     }
+
     return str;
 }
 
@@ -616,24 +717,33 @@ function select_lattice_ancestors(rid, cid, val) {
     d3.select(`#lattice-link-${lattice[p_id]['parent']}-${p_id}`)
         .classed('lattice_selected', val);
 
+    d3.select(`#hlist-link-${lattice[p_id]['parent']}-${p_id}`)
+        .classed('list_link_selected', val);
+
     d3.select(`#latnode-${p_id}`)    
         .classed('lattice_node', false)
         .classed('lattice_node_hovered', true);
+
+    d3.select(`#hlist_content-${p_id}`)
+        .classed('rule_node', false)
+        .classed('rule_node_hovered', true);
 
     p_id = lattice[p_id]['parent'];
   }
 }
 
-function show_node_stat(svg_id, node_id) {
+function show_node_stat(svg_id, node_id) {    
     let stat = d3.select(svg_id)
         .append('g')
         .attr('class', 'stat_bar');
 
     // vertical order: false negative, true negative, false positive, true positive
-    let conf_fill = [ 'url(#fp_pattern)', colorCate[0], 'url(#fn_pattern)', colorCate[1], ]
+    let conf_fill = [ 'url(#false-class-0)', colorCate[0], 'url(#false-class-1)', colorCate[1], ]
 
-    let size = summary_size_(lattice[node_id]['support']) * 5,
-        tot = lattice[node_id]['support'];
+    let size = summary_size_(lattice[0]['support']) *2,
+        tot = lattice[node_id]['support'],
+        percentage = tot / lattice[0]['support'],
+        purity = d3.max(d3.range(lattice[node_id]['conf_mat'].length), d => d3.sum(lattice[node_id]['conf_mat'][d])) / tot;
 
     let stat_bar_val = [
         {'name': `false ${target_names[0]}`, 'val':lattice[node_id]['conf_mat'][0][1],
@@ -646,14 +756,14 @@ function show_node_stat(svg_id, node_id) {
             'width': size/tot*lattice[node_id]['conf_mat'][0][0],
             'y': unit_height/2,
         },
-        {'name': `false ${target_names[1]}`, 'val':lattice[node_id]['conf_mat'][1][0],
-            'percentage': lattice[node_id]['conf_mat'][1][0]/tot,
-            'width': size/tot*lattice[node_id]['conf_mat'][1][0],
+        {'name': `false ${target_names[1]}`, 'val':lattice[node_id]['conf_mat'][1][1],
+            'percentage': lattice[node_id]['conf_mat'][1][1]/tot,
+            'width': size/tot*lattice[node_id]['conf_mat'][1][1],
             'y': unit_height,
         },
-        {'name': `true ${target_names[1]}`, 'val':lattice[node_id]['conf_mat'][1][1],
-            'percentage': lattice[node_id]['conf_mat'][1][1]/tot,
-            'width': size*lattice[node_id]['conf_mat'][1][1]/tot,
+        {'name': `true ${target_names[1]}`, 'val':lattice[node_id]['conf_mat'][1][0],
+            'percentage': lattice[node_id]['conf_mat'][1][0]/tot,
+            'width': size*lattice[node_id]['conf_mat'][1][0]/tot,
             'y': unit_height*1.5,
         },
     ];
@@ -670,7 +780,7 @@ function show_node_stat(svg_id, node_id) {
 
     let text_hint = stat.append('g')
         .attr('class', 'text_hint')
-        .attr('transform', `translate(${size}, 0)`)
+        .attr('transform', `translate(${size*.8}, 0)`)
 
     text_hint.selectAll('.lattice_stat_text')
         .data(stat_bar_val).enter()
@@ -678,22 +788,14 @@ function show_node_stat(svg_id, node_id) {
         .attr('class', 'lattice_stat_text')
         .attr('x', 0)
         .attr('y', d => d.y+unit_height/3)
-        .text(d => `${d.name}: ${d.val} (${(d.percentage*100).toFixed(2)}%)`);
+        .text(d => `${d.name}: ${d.val}`);
 
-    // overlapping b/w hovered and selected
-    if (lattice_node_selected >= 0 && (svg_id=="#rule_stat_hovered" || svg_id=="#highlighted_stat")) {
-        let coverage = stat.append('g')
-            .attr('class', 'coverage_compare')
-            .attr('transform', `translate(0, ${unit_height*2.5})`)
+    text_hint.append('text')
+        .attr('class', 'lattice_stat_text')
+        .attr('x', -size*.8)
+        .attr('y', unit_height*2.3)
+        .text(`coverage: ${tot} (${(percentage*100).toFixed(2)}%), fidelity: ${(purity*100).toFixed(2)}%`)
 
-        let subgroup1 = lattice[lattice_node_selected]['matched_data'],
-            subgroup2 = lattice[node_id]['matched_data'],
-            overlapped = subgroup1.filter(value => subgroup2.includes(value)).length;
-
-        coverage.append('text')
-            .text(`#Data instances also covered by the clicked rule: ${overlapped}`);
-
-    }
 }
 
 function generate_node_order_by_feature(feat_idx, cid, ascending) {
@@ -736,4 +838,20 @@ function generate_node_order_by_feature(feat_idx, cid, ascending) {
     node_info.forEach((d, i) => node_order[d.idx] = i);
 
     return node_order;
+}
+
+function handleScalingCheck(evt) {
+    if (evt.checked) {
+        apply_lattice_scale = true;
+    } else {
+        apply_lattice_scale = false;
+    }
+    if (apply_lattice_scale) {
+        d3.select('#lattice_legend_div')
+            .style('visibility', 'visible');
+    } else {
+        d3.select('#lattice_legend_div')
+            .style('visibility', 'hidden')
+    }
+    update_lattice_graph();
 }

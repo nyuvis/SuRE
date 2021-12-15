@@ -78,6 +78,7 @@ def generate_surrogate_rules():
 	debug_class = int(para['debug_class'])
 	print('debug_class:', debug_class)
 
+	initial_extract = bool(para['initial'])
 	num_bin = para['filter_threshold']['num_bin']
 	dataname = para['dataname']
 	path = "./data/" + dataname + "/test.json"
@@ -90,14 +91,20 @@ def generate_surrogate_rules():
 		df = pd.DataFrame(columns=data['columns'], data=data['data'])
 		y_pred = np.array(data['y_pred'])
 		y_gt = np.array(data['y_gt'])
+
+	if (initial_extract):
+		filter_threshold['support'] = int(np.floor(y_gt.shape[0] * .05))
 	
 	# train surrogate
 	surrogate_obj = tree_node_info.tree_node_info()
 	to_keep = df.columns
 	X = df.values
+	n_cls = 2
+	if ('n_cls' in data):
+		n_cls = data['n_cls']
 	surrogate_obj.initialize(X=X, y=y_gt, y_pred=y_pred, debug_class=debug_class,
 	                         attrs=to_keep, filter_threshold=filter_threshold,
-	                         dataname=dataname,
+	                         dataname=dataname, n_cls=n_cls,
 	                         num_bin=num_bin, verbose=True
 	).train_surrogate_random_forest().tree_pruning()
 
@@ -115,11 +122,11 @@ def generate_surrogate_rules():
 	real_max = surrogate_obj.real_max
 	real_percentiles = surrogate_obj.percentile_info
 	target_names = data['target_names']
-	
+
 	forest.initialize(forest_obj.tree_node_dict, real_min, real_max, real_percentiles, 
 		df, y_pred, y_gt,
 		forest_obj.rule_lists,
-		target_names)
+		target_names, n_cls)
 	forest.initialize_rule_match_table()
 	forest.initilized_rule_overlapping()
 	res = forest.find_the_min_set()
@@ -127,16 +134,15 @@ def generate_surrogate_rules():
 	# get histogram
 	res['histogram'] = forest.initialize_histogram()
 
-	# graph links
-	# graph = forest.get_graph_links()
-	# res['nodes'] = graph['nodes']
-	# res['links'] = graph['links']
-
 	# lattice structure
 	res['lattice'] = forest.get_lattice_structure(res['rules'])
+	res['lattice_preIndex'] = forest.preIndex
 
+	# for front-end process
 	res['real_percentile'] = real_percentiles
 	res['test_content'] = data
+	if (initial_extract):
+		res['min_support'] = filter_threshold['support']
 
 	# print(res)
 	return json.dumps(res)
@@ -205,8 +211,10 @@ def filter_rules():
 	print("===== filter_rules =====")
 	filters = json.loads(str(request.get_json(force=True)))
 	res = {}
-	res['rules'] = forest.filter_rules(filters)
+	res['rules'], res['coverage'] = forest.filter_rules(filters)
 	res['lattice'] = forest.get_lattice_structure(res['rules'])
+	res['lattice_preIndex'] = forest.preIndex
+
 	return json.dumps(res)
 
 @app.route("/filter_rules_by_data/", methods=['POST'])

@@ -4,8 +4,7 @@
     <meta charset="utf-8">
 
     <title>Surrogate Rule Explorer</title>
-    <base href="http://nyuvis-web.poly.edu/projects/isure/" target="_blank">
-    <!-- <base href="../" target="_blank"> -->
+    <base href="../" target="_blank">
     <link rel="stylesheet" href="static/styles.css">
   </head>
 
@@ -15,11 +14,11 @@
       <div class="model-content">
         <div>
           <p>
-            In this system, we are going to generate rules that describe the behaviors of a black box model. Please specify support*, the max number of features, the number of feature bins* you want to reach for each rule.
+            In this system, we are going to generate rules that describe the behaviors of a black box model. Please specify coverage*, the max number of conditions, the number of feature bins* you want to reach for each rule.
           </p>  
           <div style="font-size: 12px">
             <p>
-              *support: the number of instances that match a rule.<br>
+              *coverage: the number of instances that match a rule.<br>
               *number of feature bins: the number of different value ranges/bins for each feature.
             </p>
           </div>
@@ -31,17 +30,17 @@
           <div class="flex-col">
             <p class="title">Rule Set Parameters</p>
             <div>
-              <span title="lower bound of support">Min Support: </span>
-              <input id="support_val" value=20>
+              <span title="lower bound of support">Min Coverage: </span>
+              <input id="support_val" value=10>
             </div>
             <div>
-              <span title="lower bound of support">Min Fidelity: </span>
-              <input id="fidelity_val" value=0.9>
+              <span title="lower bound of fidelity">Min Fidelity: </span>
+              <input id="fidelity_val" value=0.8>
             </div>          
             <div>
               <!-- <p id="feat-text" style="margin-bottom: 1px">Max Number of Features:</p>
               <div id="slider-feat"></div> -->
-              <span>Max Number of Features: </span>
+              <span>Max Number of Conditions: </span>
               <input id="feature_val" value=3>
             </div>
             <div>
@@ -52,14 +51,14 @@
           <!-- vertical line -->
           <div class="vl" style="height: 100px"></div>
           <!-- choose to explore errors -->
-          <div>
+         <!--  <div>
             <div class="flex-row">
               <form id='analysis_goal'>
                   <p class="title"> Analysis target:</p>
                   <input type="radio" id="goal_general" name="target" value="general" checked="checked">
                   <label for="goal_general">General</label><br>
                   <input type="radio" id="goal_debug" name="target" value="debug">
-                  <label for="goal_debug">Debug</label><br>
+                  <label for="goal_debug">Experimental_Func</label><br>
               </form>
             </div>
             <div id="class4debug" style="display: none; ">
@@ -67,7 +66,7 @@
                 <p class="title">Class for debug:</p>
               </form>
             </div>
-          </div>
+          </div> -->
         </div> 
         <!-- upload file -->
         <div id="upload" class="flex-col" style="align-items: baseline;">
@@ -126,21 +125,18 @@
       </div>
     </div>
 
-    <svg width="0" height="0">
-      <pattern id="fp_pattern" patternUnits="userSpaceOnUse" width="4" height="4">
-        <rect width="4" height="4" fill="#6babc1"></rect>
-        <path d="M-1,1 l2,-2
-                 M0,4 l4,-4
-                 M3,5 l2,-2" 
-              style="stroke:black; stroke-width:1;" />
-      </pattern>
-      <pattern id="fn_pattern" patternUnits="userSpaceOnUse" width="4" height="4">
-        <rect width="4" height="4" fill="#e68882"></rect>
-        <path d="M-1,1 l2,-2
-                 M0,4 l4,-4
-                 M3,5 l2,-2" 
-              style="stroke:black; stroke-width:1;" />
-      </pattern>
+    <!-- list of operation stat -->
+    <div id="operation_record" class="model">
+      <div class="model-content">
+        <h3>Operation Statistical Records</h3>
+        <div id="explore_stat"></div>
+        <div style="margin-top: 20px">
+          <button onclick="click_cancel('#operation_record')">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <svg id="false_pattern_svg" width="0" height="0">
       <pattern id="false_pattern" patternUnits="userSpaceOnUse" width="4" height="4">
         <rect width="4" height="4" fill="white"></rect>
         <path d="M-1,1 l2,-2
@@ -148,258 +144,213 @@
                  M3,5 l2,-2" 
               style="stroke:black; stroke-width:1;" />
       </pattern>
-      <pattern id="fp_pattern_white" patternUnits="userSpaceOnUse" width="4" height="4">
-        <rect width="4" height="4" fill="#6babc1"></rect>
-        <path d="M-1,1 l2,-2
-                 M0,4 l4,-4
-                 M3,5 l2,-2" 
-              style="stroke:white; stroke-width:.5" />
-      </pattern>
-      <pattern id="fn_pattern_white" patternUnits="userSpaceOnUse" width="4" height="4">
-        <rect width="4" height="4" fill="#e68882"></rect>
-        <path d="M-1,1 l2,-2
-                 M0,4 l4,-4
-                 M3,5 l2,-2" 
-              style="stroke:white; stroke-width:.5" />
-      </pattern>
     </svg>
-    <div class="flex-col">
-      <!-- Statics -->
-      <div class="flex-col" style="margin-left: 5px">
-        <div class='flex-row'>
-          <!-- Rule/Node Generation Setting -->
-          <div class="flex-row" id="data-setting" style="display: flex">
-            <!-- choose dataset -->
-            <div class="title flex-row" style="margin-right: 20px">
-              <span>Dataset: </span>
-              <select id="dataset">
-                  <option value='diabetes'>Diabetes</option>
-                  <option value='loan'>Loan</option>
-                  <option value='heart'>Heart</option>
-                  <option value='income'>Income</option>
-                  <option value='user_defined' id="import_option">*import data*</option>
-              </select>
-            </div>
-            <!-- <div class="title flex-row" style="margin-right: 20px">
-              <span>Rule Encoding: </span>
-              <select id="rule_encoding">
-                <option value='bar'>bar</option>
-                <option value='mosaic'>mosaic</option>
-              </select>
-            </div> -->
 
-            <!-- Pruning -->
-            <div class="title flex-row" style="margin-right: 20px">
-              <span>Number of Rules: </span>
-              <span id="rule-num" style="font-weight: normal;"></span>
-              <div>
-                <input style="border-bottom: none; width: 15px; margin-left: 10px"  type="image" src="static/icon/gear.png" 
-                  title="change rule genera settings"
-                onclick="click_setting()">                      
+    <div class="flex-row" style="justify-content: center">
+      <div class="flex-col">
+        <!-- Statics -->
+        <div class="flex-col" style="margin-left: 5px">
+          <div class='flex-row'>
+            <!-- Rule/Node Generation Setting -->
+            <div class="flex-row" id="data-setting" style="display: flex">
+              <!-- choose dataset -->
+              <div class="title flex-row" style="margin-right: 20px">
+                <span>Dataset: </span>
+                <select id="dataset">
+                    <option value='diabetes'>Diabetes</option>
+                    <option value='loan'>Loan</option>
+                    <option value='user_defined' id="import_option">*import data*</option>
+                </select>
               </div>
-              <div>
-                <input style="border-bottom: none; width: 15px; margin-left: 10px"  type="image" src="static/icon/list.png" 
-                  title="check saved rules"
-                onclick="check_saved_rules()">                      
+
+              <!-- Pruning -->
+              <div class="title flex-row" style="margin-right: 20px">
+                <span>Number of Rules: </span>
+                <span id="rule-num" style="font-weight: normal;"></span>
+                <div>
+                  <input style="border-bottom: none; width: 15px; margin-left: 10px"  type="image" src="static/icon/gear.png" 
+                    title="change rule genera settings"
+                  onclick="click_setting()">                      
+                </div>
+              </div>
+
+              <!-- legend -->
+              <div id="legend_div" class="flex-col" style="height: 20px; border-left: 1px solid darkgrey">
+                <svg id="legend1"></svg>
               </div>
             </div>
+          </div>
+          <!-- Rule Filter -->
+          <div class="title">
+            <span> Rule Filter(s): </span>
+          </div>
+          <div class="flex-row" style="align-items: flex-start;">
+            <div class="subtitle flex-row">
+              <select id="filter_neg">                
+                <option value=0>Contain</option>
+                <option value=1>Not contain</option>
+              </select>
+            </div>
+            <div class="subtitle flex-row">
+              <span>Feature: </span>
+              <select id="filter_feat">                
+              </select>
+            </div>
+            <div class="subtitle flex-row">
+              <span>Value: </span>
+              <select id="filter_val">     
+              </select>
+            </div>
+            <div class="flex-col" id="selected_filter"></div>
+            <div class="title"><button id="submit_filter" onclick="generate_rules_after_filtering()">Filter</button></div>
+            <div class="title"><button id="submit_reset_filter">Reset</button></div>
+            <div class="subtitle flex-row">
+              <span>
+                Present <span id="filter_num_rule">all</span> rules (data coverage: <span id="filter_cover"></span>)
+              </span> 
+            </div>
+          </div> 
+        </div>
 
-            <!-- legend -->
-            <div class="flex-col" style="height: 20px; border-left: 1px solid darkgrey">
-              <svg id="legend1"></svg>
+        <div class="flex-row">
+          <!-- Main view of the rules -->
+          <div class="flex-col" style="border: 1px solid lightgrey; 
+            margin-left: 5px;
+            width: 960px;
+            height: 700px;">
+
+            <!-- Rules -->
+            <div id="rule-detail" style="width: 960px;">
+              <!-- Tab links -->
+              <div class="tab">
+                <button class="tablinks active" onclick="showRule(event, 'lattice_content')">
+                  Feature-aligned Tree
+                </button>
+                <!-- <button class="tablinks" onclick="showRule(event, 'overview')">
+                  Tabular Rule Set
+                </button> -->
+                <button class="tablinks" onclick="showRule(event, 'rule_list_content')">
+                  Text List
+                </button>
+                <button class="tablinks" onclick="showRule(event, 'rule_hierarchical_list')">
+                  Hierarchical List
+                </button>
+                
+              </div>
+
+              <!-- Lattice -->
+              <div class="flex-col tabcontent" id="lattice_content" style="display: flex">
+                <div class="flex-row">
+                  <label><input type="checkbox" checked onclick="handleScalingCheck(this)">Apply Scaling on Nodes</label>
+                  <div id="lattice_legend_div">
+                    <svg id="lattice_legend"></svg>
+                  </div>
+                </div>
+                
+                <div id="rule_div2" style="max-height: 600px; max-width: 950px; overflow: auto;">
+                  <svg id='lattice'/>
+                </div>
+              </div>
+
+              <!-- Tabular View -->
+              <div class="tabcontent" id="overview">
+                  <div class="flex-col">
+                    <div class="flex-row" id="header1" style="max-width: 950px;">
+                      <div>
+                        <svg id="stat_legend"></svg>
+                      </div>
+                      <div id="column_div" style="max-width: 800px; overflow-x: scroll;">
+                        <div>
+                          <svg id="column_svg" style="margin-left: 0px"></svg>            
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="flex-row" style="max-height: 760px; max-width: 950px;">           
+                      <div id="stat_div" class='stat' style="max-height: 560px; overflow: scroll; max-width: 220px; width: 100%">
+                        <div style="width: 100%">
+                          <svg id="stat"></svg>              
+                        </div>
+                      </div>
+                      <div id="rule_div" style="max-height: 760px; max-width: 800px; overflow: scroll;">
+                        <div>
+                          <svg id="rule_svg"></svg>            
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+              </div>
+             
+              <!-- Rule List -->
+              <div class="flex-col tabcontent" id="rule_list_content">
+                <svg id="rule_list_legend"></svg>
+
+                <div id="rule_div3" style="max-height: 650px; max-width: 950px; overflow: auto;">
+                  <svg id='rule_list'/>
+                </div>
+              </div>
+
+              <!-- Rule Hierachical List -->
+              <div class="flex-col tabcontent" id="rule_hierarchical_list">
+                <svg id="rule_hlist_legend"></svg>
+                <div id="rule_div4" style="max-height: 650px; max-width: 950px; overflow: auto;">
+                  <svg id='rule_hlist'/>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        <!-- Rule Filter -->
-        <div class="title">
-          Rule Filter(s):
-        </div>
-        <div class="flex-row" style="align-items: flex-start;">
-          <div class="subtitle flex-row">
-            <span>Feature: </span>
-            <select id="filter_feat">                
-            </select>
-          </div>
-          <div class="subtitle flex-row">
-            <span>Value: </span>
-            <select id="filter_val">     
-            </select>
-          </div>
-          <div class="flex-col" id="selected_filter"></div>
-          <div class="title"><button id="submit_filter" onclick="generate_rules_after_filtering()">Filter</button></div>
-          <div class="title"><button id="submit_reset_filter">Reset</button></div>
-        </div> 
-        <!-- Data Filter -->
-        <!-- <div class="title">
-          Data Filter(s):
-        </div>
-        <div class="flex-row" style="align-items: flex-start;">
-          <div class="subtitle flex-row">
-            <span>Feature: </span>
-            <select id="data_filter_feat">                
-            </select>
-          </div>
-          <div class="subtitle flex-row">
-            <span>Value: </span>
-            <select id="data_filter_val">     
-            </select>
-          </div>
-          <div class="flex-col" id="data_selected_filter"></div>
-          <div class="title"><button id="data_submit_filter" onclick="generate_rules_for_data_filtering()">Filter</button></div>
-          <div class="title"><button id="data_submit_reset_filter">Reset</button></div>
-        </div>  -->
-      </div>
 
-      <!-- Main view of the rules -->
-      <div class="flex-col" style="border: 1px solid lightgrey; 
-        margin-left: 5px;
-        width: 1250px;
-        height: 670px;">
+          <!-- Comparison and Text Hint -->
+          <div class="flex-col info-div" style="border: 1px solid lightgrey; 
+              margin-left: 5px;
+              width: 370px;
+              height: 700px;">
 
-        <!-- Rules -->
-        <div id="rule-detail" style="max-width: 1250px;">
-          <!-- Tab links -->
-          <div class="tab">
-            <button class="tablinks active" onclick="showRule(event, 'lattice_content')">
-              Lattice
-            </button>
-            <button class="tablinks" onclick="showRule(event, 'overview')">
-              Tabular Rule Set
-            </button>
-            <button class="tablinks" onclick="showRule(event, 'rule_list_content')">
-              Text List
-            </button>
-            <!-- <button class="tablinks" id="tab_multiple" onclick="showRule(event, 'multiple')">
-              Similar Subgroups
-            </button>
-            <button class="tablinks" onclick="showRule(event, 'data_tab')">
-              Data
-            </button> -->
-          </div>
-
-           <!-- Lattice -->
-          <div class="flex-row tabcontent" id="lattice_content" style="display: flex">
-            <div id="rule_div2" style="max-height: 900px; max-width: 900px; overflow: scroll;">
-              <svg id='lattice'/>
+            <div class="tab tab-title">
+              Comparison
             </div>
-            <div class="flex-col text-hint" id="lattice_hint">
-              <div class="flex-col selected_div" style="display: none">
+            <div id="comparison_div" class="flex-col" style="height: 350px">
+              <div class="title">Coverage</div>
+              <div style="max-height: 100px; overflow: auto;">
+                <div id="class_summary_div">
+                  <svg id="class_summary"></svg>
+                </div>
+              </div>
+              <div class="title">
+                <span>Overlap</span>
+              </div>
+              <label><input type="checkbox" checked onclick="handleCheck(this)">Highlight Rules in Visualization</label>
+
+              <div id="overlap_summary_div" style="max-height: 200px; overflow:auto;">
+                <svg id="overlap_summary"></svg>
+              </div>
+            </div>
+
+            <div class="tab tab-title">
+              Rule Information
+            </div>
+            <div class="flex-col text-hint" id="lattice_hint" style="max-height: 120px">
+              <div class="flex-col selected_div" style="display: none;">
                 <div class="flex-row" style="justify-content: space-between; align-items: flex-start;">
                   <p id="selected_desp"></p>
-                  <button id="selected_save" style="height: 20px; display: none">save rule</button>
+                  <!-- <button id="selected_save" onclick="rule_save()" style="height: 20px; display: none">save rule</button> -->
                 </div>
-                <svg id="selected_stat" style="height:80px;"></svg>
+                <svg id="selected_stat"></svg>
               </div>
               <div class="flex-col">
                 <p id="highlighted_desp"></p>
-                <svg id="highlighted_stat" style="height:80px"></svg>
+                <svg id="highlighted_stat"></svg>
               </div>
             </div>
           </div>
-
-          <!-- Tabular View -->
-          <div class="tabcontent" id="overview">
-            <div class="flex-row">
-              <div class="flex-col">
-                <div class="flex-row" id="header1" style="max-width: 1050px;">
-                  <div>
-                    <svg id="stat_legend"></svg>
-                  </div>
-                  <div id="column_div" style="max-width: 750px; overflow-x: scroll;">
-                    <div>
-                      <svg id="column_svg" style="margin-left: 0px"></svg>            
-                    </div>
-                  </div>
-                </div>
-
-                <div class="flex-row" style="max-height: 760px; max-width: 1050px; overflow: scroll;">           
-                  <div id="stat_div" class='stat' style="max-height: 560px; overflow: scroll;">
-                    <div class="flex-row">
-                      <!-- <svg id="compare"></svg> -->
-                      <svg id="stat"></svg>              
-                    </div>
-                  </div>
-                  <div id="rule_div" style="max-height: 760px; max-width: 750px; overflow: scroll;">
-                    <div>
-                      <svg id="rule_svg"></svg>            
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="flex-col text-hint">
-                <div class="flex-col selected_div" style="display: none">
-                  <div class="flex-row" style="justify-content: space-between; align-items: flex-start;">
-                    <p id="rule_description_selected" style="margin-bottom: 10px"></p>
-                    <button id="rule_selected_save" style="height: 20px; display: none">save rule</button>
-                  </div>
-                  <svg id="rule_stat_selected" style="height:80px;"></svg>
-                </div>
-                <div class="flex-col">
-                  <p id="rule_description_hovered" style="margin-bottom: 10px"></p>
-                  <svg id="rule_stat_hovered" style="height:80px"></svg>
-                </div>
-              </div>
-            </div>
-          </div>
-         
-          <!-- Rule List -->
-          <div class="flex-row tabcontent" id="rule_list_content">
-            <div id="rule_div3" style="max-height: 900px; max-width: 900px; overflow: scroll;">
-              <svg id='rule_list'/>
-            </div>
-            
-          </div>
-
-          <!-- Selected multiple nodes -->
-          <!-- <div class="flex-col tabcontent" id="multiple">
-             <div class='flex-row' id="header4">
-              <div>
-                <svg id='stat_legend4'></svg>
-              </div>
-              <div id="column_div4" style="max-width: 1250px; overflow-x: scroll;">
-                <div>
-                  <svg id="column_svg4" style="margin-left: 10px"></svg>            
-                </div>
-              </div>
-            </div>
-
-            <div class="flex-row">
-              <div id="stat_div4" class='stat flex-row' style="max-height: 360px; overflow: scroll;">
-                <div>
-                  <svg id="compare4"></svg>
-                  <svg id="stat4"></svg>              
-                </div>
-              </div>
-              <div id="rule_div4" style="max-height: 360px; max-width: 1250px; overflow: scroll;">
-                <div>
-                  <svg id="rule_svg4"></svg>            
-                </div>
-              </div>
-            </div>
-          </div> -->
-
-          <!-- <div class='flex-col tabcontent' id='data_tab'>
-            <div id="header5">
-              <div id="column_div5" style="max-width: 1250px; margin-left: 20px overflow-x: scroll;">
-                <div>
-                  <svg id="column_svg5" style="margin-left: 30px"></svg>            
-                </div>
-              </div>
-            </div>
-            <div class='flex-row' >
-              <div id="data-pred" style="max-height: 660px; max-width: 200px; overflow-y: scroll;">
-                <svg></svg>
-              </div>
-              <div id="data-table" style="max-height: 660px; max-width: 1050px; overflow: scroll;">
-              </div>
-            </div>
-          </div>
-
-        </div> -->
+        </div>
+      </div>
     </div>
+      
     
     
     <canvas id="myCanvas" width="0" height="0"></canvas>
+    <div class="node_tooltip" id="node_tooltip" style="opacity: 0"></div>
   	
 	<!-- load the d3.js library -->	
 	<script src="static/lib/d3.v4.min.js"></script>
@@ -407,15 +358,12 @@
 
   <script src="static/const.js"></script>
   <script src="static/util.js"></script>
-  <script src="static/summary_view.js"></script>
   <script src="static/controller.js"></script>
-  <script src="static/stat_summary_view.js"></script>
-  <script src="static/tree_path.js"></script>
   <script src="static/lattice.js"></script>
   <script src="static/rule_list.js"></script>
   <script src="static/legend.js"></script>
   <script src="static/linked_rule_view.js"></script>
-  <script src="static/graph.js"></script>
+  <script src="static/compare.js"></script>
   <script src="static/main.js"></script>
   </body>
 </html>

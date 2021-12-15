@@ -9,7 +9,7 @@ let selected_feat = -1;
 let selected_filter = {}, data_selected_filter = {}, pred_filter = -1;
 let goal_debug = -1, debug_class = -1;
 
-let saved_rules = {}, selected_rule_text = "", selected_rule_rid, selected_rule_cid;
+let saved_rules = {}, saved_rules_idx2id = [], selected_rule_text = "", selected_rule_rid, selected_rule_cid;
 
 d3.select("#node_encoding")
     .on("change", function() {
@@ -87,14 +87,20 @@ d3.select('#dataset')
     .on('change', function() {
         let val = d3.select(this).property('value');
         folder = val;
-        param_set = false;
         if (val == "user_defined") {
             click_setting();
         } else {
             d3.select("#progress")
                 .style('display', 'block');
-            // TODO: reset debug parameters
-            loadData();
+            
+            set_default_rule_para();
+            explore_stat = {
+              "regeneration": 0,
+              "view_click": [1,0,0,0],
+            }
+
+            intrusion = false;
+            loadData(intrusion, true);
         }
     })
 
@@ -134,28 +140,28 @@ function generate_rules() {
     d3.select('#support_val')
         .attr('value', function() {
             support_val = this.value;
-            filter_threshold['support'] = support_val;
+            filter_threshold['support'] = +support_val;
             return this.value;
         });
 
     d3.select('#fidelity_val')
         .attr('value', function() {
             fidelity= this.value;
-            filter_threshold['fidelity'] = fidelity;
+            filter_threshold['fidelity'] = +fidelity;
             return this.value;
         });
 
     d3.select('#feature_val')
         .attr('value', function() {
             num_feat_val = this.value;
-            filter_threshold['num_feat'] = num_feat_val;
+            filter_threshold['num_feat'] = +num_feat_val;
             return this.value;
         });
 
     d3.select('#feature_bin')
         .attr('value', function() {
             num_feat_bin= this.value;
-            filter_threshold['num_bin'] = num_feat_bin;
+            filter_threshold['num_bin'] = +num_feat_bin;
             return this.value;
         });
 
@@ -168,10 +174,12 @@ function generate_rules() {
     d3.select("#myModel")
         .style("display", "none");
 
-    loadData();
+    loadData(intrusion, false);
 
     d3.select("#progress")
         .style("display", "block");
+
+    explore_stat['regeneration']++;
 }
 
 function click_setting() {
@@ -194,7 +202,7 @@ function click_cancel(id) {
         .style("display", "none");
 }
 
-function check_saved_rules() {
+function check_saved_rules() {    
     d3.select("#saved_rule_list")
         .style("display", "block");
 }
@@ -297,8 +305,7 @@ function click_summary_node(node_id, add_to_selection) {
                 summary_info['fp'] += Math.floor(node_info[node_id]['conf_mat'][0][1] * d3.sum(node_info[node_id]['value']))
                 summary_info['tn'] += Math.floor(node_info[node_id]['conf_mat'][1][1] * d3.sum(node_info[node_id]['value']))
                 summary_info['fn'] += Math.floor(node_info[node_id]['conf_mat'][1][0] * d3.sum(node_info[node_id]['value']))
-                // summary_info['r-squared'][0] += summary_info['tp'] + summary_info['tn'];
-                // summary_info['r-squared'][1] += 
+               
             });
             render_stat_summary(summary_info);
 
@@ -369,8 +376,15 @@ function click_summary_node(node_id, add_to_selection) {
     })
 }
 
-function select_filter(feat_ix, val_ix) {
+function select_filter(feat_ix, val_ix, neg) {
     let str = attrs[feat_ix];
+
+    if (neg == 1) {
+        str = "not contain " + str;
+    } else {
+        str = "contain " + str; 
+    }
+
     if (val_ix == -1) {
         str += ': any value'
     } else {
@@ -400,7 +414,7 @@ function select_filter(feat_ix, val_ix) {
     }
     
     // update selected filters 
-    selected_filter[feat_ix] = val_ix;
+    selected_filter[feat_ix] = {"val_ix": val_ix, "neg": neg};
 }
 
 function select_data_filter(feat_ix, val_ix) {
@@ -487,12 +501,29 @@ function set_prediction_filter(pid) {
     }
 }
 
+function refresh() {
+    d3.select(`.checked_circle`).remove();
+    d3.selectAll('#selected_filter > *').remove();
+
+    // reset filters
+    document.getElementById('filter_neg').value = 0;
+    document.getElementById('filter_feat').value = -1;
+    document.getElementById('filter_val').value = -1;
+
+    // clear selected rule 
+    d3.select('#rule_description_selected').html("");
+    d3.select('#selected_desp').html("");
+    d3.select('#selected_stat g').remove();
+    d3.select('.selected_div')
+        .style('display', "none");
+    lattice_node_selected = -1;
+}
+
 d3.select('#submit_reset_filter')
     .on('click', () => {
         selected_filter = {};
         pred_filter = -1;
-        d3.select(`.checked_circle`).remove();
-        d3.selectAll('#selected_filter > *').remove();
+        refresh()
         generate_rules_after_filtering();
     });
 
@@ -501,8 +532,7 @@ d3.select('#data_submit_reset_filter')
     .on('click', () => {
         data_selected_filter = {};
         pred_filter = -1;
-        d3.select(`.checked_circle`).remove();
-        d3.selectAll('#data_selected_filter > *').remove();
+        refresh()
         generate_rules_for_data_filtering();
     })
 
@@ -512,9 +542,15 @@ function generate_rules_after_filtering() {
             'pred_filter': pred_filter,
         }), (info) => {
             listData = info['rules'];
+            coverage = info['coverage'];
             lattice = info['lattice'];
+            preIndex = info['lattice_preIndex'];
 
             col_order = column_order_by_feat_freq(listData);
+
+            // filter stat
+            d3.select('#filter_num_rule').html(listData.length);
+            d3.select('#filter_cover').html(`${(coverage*100).toFixed(2)}%`);
 
             // rule
             tab_rules[0] = listData;
@@ -524,11 +560,15 @@ function generate_rules_after_filtering() {
             listData.forEach((d, idx) => {
                 rid2rix[d['rid']] = idx;
             }) 
+
+            clear();
             construct_lattice();
-
-            update_rule_rendering(rule_svg, col_svg, stat_svg, "", listData, col_order);
-
             render_lattice();
+            update_rule_rendering(rule_svg, col_svg, stat_svg, "", listData, col_order);
+            render_list();
+            render_hierarchical_list();
+
+            render_saved_summary();
         })
 }
 
@@ -555,25 +595,37 @@ function generate_rules_for_data_filtering() {
         })
 }
 
-d3.select('#rule_selected_save')
-    .on('click', function(){
-        rule_save();
-    });
-
-d3.select('#selected_save')
-    .on('click', function(){
-        rule_save();
-    });
-
-
 function rule_save() {
-    let idx = saved_rules['max_idx'] + 1;
-    saved_rules[idx] = selected_rule_text;
-    saved_rules['max_idx'] = idx
+    // check whether added
+    if (lattice_node_selected in saved_rules) return;
 
+    // add the node/rule 
+    saved_rules[lattice_node_selected] = {
+        "idx": saved_rules_idx2id.length,
+        "text": selected_rule_text
+    };
+    saved_rules_idx2id.push(lattice_node_selected);
+
+    // update lattice view
+    d3.select(`#saved_node-${lattice_node_selected} > text`)
+        .text(saved_rules[lattice_node_selected].idx+1);
+    d3.select(`#saved_item-${lattice_node_selected} > text`)
+        .text(saved_rules[lattice_node_selected].idx+1);
+
+    if (show_saved_node_mark) {
+        d3.select(`#saved_node-${lattice_node_selected}`)
+            .classed('saved_node_highlight', true)
+            .classed('saved_node_hidden', false);
+
+        d3.select(`#saved_item-${lattice_node_selected}`)
+            .classed('saved_node_highlight', true)
+            .classed('saved_node_hidden', false);
+    }
+
+    // update saved rule panel
     let rule_div = d3.select('#rule_list_present')
         .append('div')
-        .attr('id', `saved_rule-${idx}`)
+        .attr('id', `saved_rule-${lattice_node_selected}`)
         .attr('class', 'filter-summary flex-row')
 
     rule_div.append('div')
@@ -585,9 +637,44 @@ function rule_save() {
         .html('x')
         .on('click', function() {
                 let fix = this.parentNode.id.split('-')[1];
-                delete selected_filter[fix]
+                rule_remove(fix);
                 this.parentNode.parentNode.removeChild(this.parentNode);
-            })
+            });
+    render_saved_summary();
+}
+
+function rule_remove(node_id) {
+    let removed_idx = saved_rules[node_id]['idx'];
+
+    // update this node in lattice view
+    if (show_saved_node_mark) {
+        d3.select(`#saved_node-${node_id}`)
+            .classed('saved_node_highlight', false)
+            .classed('saved_node_hidden', true);
+
+        d3.select(`#saved_item-${node_id}`)
+            .classed('saved_node_highlight', false)
+            .classed('saved_node_hidden', true);
+    }
+    d3.select(`#saved_node-${node_id} > text`)
+        .text("");
+    d3.select(`#saved_item-${node_id} > text`)
+        .text("");
+
+    delete saved_rules[node_id];
+    // update idx and other nodes in lattice view
+    saved_rules_idx2id.splice(removed_idx, 1);
+    for (let i = removed_idx; i < saved_rules_idx2id.length; i++) {
+        saved_rules[saved_rules_idx2id[i]]['idx'] = i;
+        d3.select(`#saved_node-${saved_rules_idx2id[i]} > text`)
+            .text(i+1);
+        d3.select(`#saved_item-${saved_rules_idx2id[i]} > text`)
+            .text(i+1);
+    }
+    // remove rule text in the saved rules panel
+    d3.select(`#saved_rule-${node_id}`).remove();
+
+    render_saved_summary();
 }
 
 function highlight_in_tab(tab_id, tab_p, node_id) {
@@ -637,7 +724,6 @@ function click_rule(clicked_g, rule_idx, rule, tab_p) {
         .classed('lattice_link', true)
 
     node_click(rule_idx, rule['rules'].length-1);
-    selected_rule_text = generate_rule_plain_text(rule_idx, rule['rules'].length-1);
     selected_rule_rid = rule_idx;
     selected_rule_cid = rule['rules'].length-1;
 }
@@ -733,63 +819,6 @@ function render_data(rule_idx, rule) {
     })
 }
 
-function hover_rule(clicked_g, rule_idx, rule, tab_p) {
-    let tab_id;
-    if (tab_p == '') {
-        tab_id = 0;
-    } else {
-        tab_id = +tab_p - 1;
-    }
-
-    // highlight the rule in the rule view
-    clicked_g.select('.back-rect')
-        .classed('rule_hover', true);
-    // highlight in the stat
-    d3.select(`#stat${tab_p}-back-rect-${rule_idx}`)
-        .classed('rule_hover', true);
-    // highlight in the compare
-    d3.select(`#comp${tab_p}-back-rect-${rule_idx}`)
-        .classed('rule_hover', true);
-
-    // update rule description
-    let rule_des = d3.select('#rule_description_hovered');
-
-    let rules = listData[rule_idx];
-    if (rule) {
-        rules = rule;
-    }
-
-    let [str, cond_str] = generate_tabular_rule(rules)
-
-    // console.log(cond_str);
-    
-    rule_des.append('p')
-        .html(str);
-
-    show_node_stat('#rule_stat_hovered', r2lattice[rule_idx][listData[rule_idx]['rules'].length-1]);
-
-    // graph
-    // if (tab_p == '') {
-    //     let source = listData[rule_idx]['rid'];
-    //     d3.select(`#node-${source}`)
-    //         .style('stroke', 'gray')
-    //         .style('stroke-width', '1.5px');
-    //     graph_nodes.forEach(node => {
-    //         if (node['id']===source || graph_link_dict[source].indexOf(node['id'])>=0 ) {
-    //             return;
-    //         }
-    //         d3.select(`#node-${node['id']}`)
-    //             .style('fill', '#999')
-    //             .style('fill-opacity', .2)
-    //     })
-
-    //     graph_link_dict[source].forEach(target => {
-    //         d3.select(`#link-${source}-${target}`)
-    //             .style('stroke-opacity', '0.9');
-    //     });
-    // }
-}
-
 function generate_tabular_rule(rules) {
     let str = "", cond_str = "";
 
@@ -806,12 +835,9 @@ function generate_tabular_rule(rules) {
         cond_str += `(df['${attrs[d['feature']]}']`;
 
         if (d['sign'] !== 'range') {
-            // str += " " + d['sign'];
-            // if (d['sign'] == '>') str += '=';
             if (d['sign'] == '<=') {
                 str += "<";
                 cond_str += '<';
-                // if (d['threshold'] == real_max[d['feature']]) str += '=';
             } else {
                 str += ">=";
                 cond_str += '>=';
@@ -819,9 +845,6 @@ function generate_tabular_rule(rules) {
             str += readable_text(d['threshold']) + " ";
             cond_str += readable_text(d['threshold']) + ")"
         } else {
-            // str += " btw. (" + d['threshold0'] + ', ' + d['threshold1'] + '] '
-            // let threshold0 = real_percentile['percentile_table'][Math.ceil(d['threshold0'])][d['feature']],
-            //     threshold1 = real_percentile['percentile_table'][Math.floor(d['threshold1'])][d['feature']]
 
             str += " from " + readable_text(d['threshold0']) + " to " + readable_text(d['threshold1']) + " ";
             cond_str += `>= ${readable_text(d['threshold0'])} ) & (df['${attrs[d['feature']]}'] < ${readable_text(d['threshold1'])})`
@@ -860,6 +883,21 @@ function showRule(evt, id) {
   // Show the current tab, and add an "active" class to the button that opened the tab
   document.getElementById(id).style.display = "flex";
   evt.currentTarget.className += " active";
+
+  switch (id) {
+    case "lattice_content":
+        explore_stat['view_click'][0]++;
+        break;
+    case "overview":
+        explore_stat['view_click'][1]++;
+        break;
+    case "rule_list_content":
+        explore_stat['view_click'][2]++;
+        break;
+    case "rule_hierarchical_list":
+        explore_stat['view_click'][3]++;
+        break;
+  }
 }
 
 function change_node_encoding(val) {
@@ -974,9 +1012,6 @@ function click_feat_filter(feat_idx) {
             else 
                 return `[${real_percentile[feat_idx][d]}, ${real_max[feat_idx]}]`
         })
-        .on('click', (evt) => {
-
-        })
 }
 
 function export_rule(){
@@ -1000,4 +1035,31 @@ function export_rule(){
     element.click();
 
     document.body.removeChild(element);
+}
+
+function handleCheck(evt) {
+    if (evt.checked) {
+        Object.keys(saved_rules).forEach(node_id => {
+            d3.select(`#saved_node-${node_id}`)
+                .classed('saved_node_highlight', true)
+                .classed('saved_node_hidden', false);
+        });
+        show_saved_node_mark = true;
+    } else {
+        d3.selectAll('.saved_node_highlight')
+            .classed('saved_node_highlight', false)
+            .classed('saved_node_hidden', true);
+        show_saved_node_mark = false;
+    }
+}
+
+function click_operation_stat() {
+    d3.select('#explore_stat > p').remove();
+
+    d3.select('#explore_stat')
+        .append('p')
+        .html(`#regenerate_rules: ${explore_stat['regeneration']} <br> 
+            #view_click: ${explore_stat['view_click']}`)
+    d3.select("#operation_record")
+        .style("display", "block");
 }
